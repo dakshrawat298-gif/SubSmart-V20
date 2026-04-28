@@ -31,6 +31,8 @@ contract BillingHub is ReentrancyGuard {
     // Errors
     // ---------------------------------------------------------------------
 
+    /// @notice Treasury address (constructor arg) must be non-zero.
+    error InvalidTreasury();
     /// @notice Token address must be non-zero.
     error InvalidToken();
     /// @notice Per-cycle charge amount must be greater than zero.
@@ -96,6 +98,34 @@ contract BillingHub is ReentrancyGuard {
     }
 
     // ---------------------------------------------------------------------
+    // Constants
+    // ---------------------------------------------------------------------
+
+    /// @notice Protocol fee charged on every recurring settlement, expressed
+    ///         in basis points (1 bp = 0.01%). 50 bps = 0.5%.
+    /// @dev    Immutable at the bytecode level — encoding it as a constant
+    ///         keeps it tamper-proof and gas-cheap. To change the fee a new
+    ///         versioned `BillingHub` deployment is required, per
+    ///         `2_SYSTEM_DESIGN.md` §1.3 ("Immutable core").
+    uint256 public constant PROTOCOL_FEE_BPS = 50;
+
+    /// @notice Denominator for `PROTOCOL_FEE_BPS` (basis-point math).
+    uint256 internal constant FEE_DENOMINATOR = 10_000;
+
+    // ---------------------------------------------------------------------
+    // Immutables
+    // ---------------------------------------------------------------------
+
+    /// @notice Recipient of every protocol fee. Set once at deployment and
+    ///         never mutable thereafter, so the protocol cannot redirect
+    ///         fees away from the address governance committed to at launch.
+    /// @dev    The contract still holds zero balance at rest: every
+    ///         `safeTransferFrom` to `treasury` debits the subscriber and
+    ///         credits the treasury directly within the same transaction,
+    ///         preserving the §0.3 non-custodial invariant.
+    address public immutable treasury;
+
+    // ---------------------------------------------------------------------
     // Storage
     // ---------------------------------------------------------------------
 
@@ -107,6 +137,21 @@ contract BillingHub is ReentrancyGuard {
 
     /// @notice planId => subscriber => Subscription state.
     mapping(uint256 => mapping(address => Subscription)) public subscriptions;
+
+    // ---------------------------------------------------------------------
+    // Constructor
+    // ---------------------------------------------------------------------
+
+    /// @notice Deploy `BillingHub` and bind it permanently to a treasury.
+    /// @dev    The treasury address is captured as `immutable`; there is
+    ///         no setter, no admin, and no upgrade path. Reject the zero
+    ///         address — a misconfigured deployment would silently burn
+    ///         every protocol-fee transfer.
+    /// @param  treasury_  Recipient of all `PROTOCOL_FEE_BPS` fees.
+    constructor(address treasury_) {
+        if (treasury_ == address(0)) revert InvalidTreasury();
+        treasury = treasury_;
+    }
 
     // ---------------------------------------------------------------------
     // Events
@@ -328,7 +373,16 @@ contract BillingHub is ReentrancyGuard {
         uint32 newCycleNumber = sub.cyclesCharged + 1;
         uint64 newNextChargeTime = sub.nextChargeTime + plan.cycleLengthSeconds;
 
-        // -- Effects (state mutated BEFORE external call per CEI §5) --
+        // Protocol-fee split (0.5% by default). Computed against the cached
+        // `plan.amountPerCycle` so the customer is never debited more than
+        // the bounded permit value, regardless of `feeAmount` arithmetic.
+        // `merchantAmount + feeAmount == plan.amountPerCycle` by
+        // construction, so subscribe()-time allowance accounting still holds.
+        uint256 feeAmount =
+            (plan.amountPerCycle * PROTOCOL_FEE_BPS) / FEE_DENOMINATOR;
+        uint256 merchantAmount = plan.amountPerCycle - feeAmount;
+
+        // -- Effects (state mutated BEFORE external calls per CEI §5) --
         sub.cyclesCharged = newCycleNumber;
         sub.nextChargeTime = newNextChargeTime;
         if (newCycleNumber == sub.cyclesAuthorized) {
@@ -338,9 +392,19 @@ contract BillingHub is ReentrancyGuard {
         }
 
         // -- Interactions --
-        // Funds move subscriber -> merchant directly. The protocol contract
-        // never receives custody, preserving the §0.3 non-custodial invariant.
-        IERC20(plan.token).safeTransferFrom(subscriber, plan.merchant, plan.amountPerCycle);
+        // Both legs of the split move directly from `subscriber`. The
+        // protocol contract never sits in the value path, preserving the
+        // §0.3 non-custodial invariant: protocol token balance stays at 0.
+        IERC20 token = IERC20(plan.token);
+        token.safeTransferFrom(subscriber, plan.merchant, merchantAmount);
+        if (feeAmount != 0) {
+            // PROTOCOL_FEE_BPS is a non-zero compile-time constant, so the
+            // guard is a defence-in-depth check against an unreachable code
+            // path (e.g. `amountPerCycle == 0` is already rejected at plan
+            // creation). It also avoids a wasteful zero-value transferFrom
+            // on tokens that revert on zero amounts.
+            token.safeTransferFrom(subscriber, treasury, feeAmount);
+        }
 
         emit Charged(
             planId,
