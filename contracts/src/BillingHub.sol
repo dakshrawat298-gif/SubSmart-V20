@@ -48,6 +48,13 @@ contract BillingHub is ReentrancyGuard {
     /// @notice Subscriber already has an active subscription to this plan.
     error SubscriptionAlreadyActive();
 
+    /// @notice Subscription is not active (never created, exhausted, or
+    ///         terminated by the final cycle).
+    error SubscriptionInactive();
+
+    /// @notice The next charge time has not been reached yet.
+    error ChargeNotDue();
+
     // ---------------------------------------------------------------------
     // Types
     // ---------------------------------------------------------------------
@@ -275,6 +282,73 @@ contract BillingHub is ReentrancyGuard {
 
         emit Charged(
             planId, msg.sender, plan.merchant, plan.amountPerCycle, 1, nextChargeTime
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Relayer API (permissionless auto-settlement)
+    // ---------------------------------------------------------------------
+
+    /// @notice Settle the next-due cycle for an active subscription.
+    /// @dev    Permissionless: any address may call. Designed for
+    ///         decentralized relayers (Gelato, Pokt, etc) — there is no
+    ///         on-chain reward paid by this contract; relayer compensation
+    ///         is arranged off-chain.
+    ///
+    ///         Behaviour:
+    ///           - Reverts when the subscription is inactive (never created,
+    ///             cancelled, or terminated after the final cycle).
+    ///           - Reverts when `block.timestamp < nextChargeTime`.
+    ///           - Advances `nextChargeTime` by exactly one
+    ///             `cycleLengthSeconds` per call. Late charges (e.g. three
+    ///             cycles missed) require three separate `charge()` calls;
+    ///             this prevents a single late charge from collapsing
+    ///             multiple cycles' worth of debits into one transferFrom.
+    ///           - On the final cycle, `active` is set to `false` so a
+    ///             follow-up call reverts with `SubscriptionInactive`.
+    ///
+    ///         Security:
+    ///           - `nonReentrant` per AI guidelines §5 (function calls
+    ///             `transferFrom` on an arbitrary ERC-20).
+    ///           - CEI ordering: storage mutations happen before the token
+    ///             interaction.
+    ///           - Non-custodial (§0.3): tokens move directly from
+    ///             `subscriber` to `plan.merchant`. Protocol balance is
+    ///             never touched.
+    ///
+    /// @param  planId      Plan identifier.
+    /// @param  subscriber  Address of the subscriber whose cycle is due.
+    function charge(uint256 planId, address subscriber) external nonReentrant {
+        // -- Checks --
+        Subscription storage sub = subscriptions[planId][subscriber];
+        if (!sub.active) revert SubscriptionInactive();
+        if (block.timestamp < sub.nextChargeTime) revert ChargeNotDue();
+
+        Plan memory plan = plans[planId];
+        uint32 newCycleNumber = sub.cyclesCharged + 1;
+        uint64 newNextChargeTime = sub.nextChargeTime + plan.cycleLengthSeconds;
+
+        // -- Effects (state mutated BEFORE external call per CEI §5) --
+        sub.cyclesCharged = newCycleNumber;
+        sub.nextChargeTime = newNextChargeTime;
+        if (newCycleNumber == sub.cyclesAuthorized) {
+            // Final cycle — terminate the subscription so any further
+            // charge() call reverts cleanly with SubscriptionInactive.
+            sub.active = false;
+        }
+
+        // -- Interactions --
+        // Funds move subscriber -> merchant directly. The protocol contract
+        // never receives custody, preserving the §0.3 non-custodial invariant.
+        IERC20(plan.token).safeTransferFrom(subscriber, plan.merchant, plan.amountPerCycle);
+
+        emit Charged(
+            planId,
+            subscriber,
+            plan.merchant,
+            plan.amountPerCycle,
+            newCycleNumber,
+            newNextChargeTime
         );
     }
 
