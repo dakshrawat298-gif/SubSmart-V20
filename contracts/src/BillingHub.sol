@@ -57,6 +57,12 @@ contract BillingHub is ReentrancyGuard {
     /// @notice The next charge time has not been reached yet.
     error ChargeNotDue();
 
+    /// @notice The supplied subscription id has never been registered.
+    error SubscriptionNotFound();
+
+    /// @notice Caller is neither the subscriber nor the plan's merchant.
+    error Unauthorized();
+
     // ---------------------------------------------------------------------
     // Types
     // ---------------------------------------------------------------------
@@ -78,6 +84,16 @@ contract BillingHub is ReentrancyGuard {
         uint64 cycleLengthSeconds;
         uint32 maxCycles;
         bool active;
+    }
+
+    /// @notice Reverse lookup payload for a `bytes32` subscription id —
+    ///         resolves the (planId, subscriber) pair without forcing every
+    ///         caller to recompute the keccak preimage.
+    /// @param  planId      Plan the subscription belongs to.
+    /// @param  subscriber  Wallet that funded the subscription.
+    struct SubscriptionLocator {
+        uint256 planId;
+        address subscriber;
     }
 
     /// @notice A subscriber's commitment to a plan.
@@ -137,6 +153,16 @@ contract BillingHub is ReentrancyGuard {
 
     /// @notice planId => subscriber => Subscription state.
     mapping(uint256 => mapping(address => Subscription)) public subscriptions;
+
+    /// @notice keccak256(abi.encode(planId, subscriber)) => SubscriptionLocator.
+    /// @dev    Populated on every successful `subscribe()` call. Allows
+    ///         `cancel(bytes32 subscriptionId)` to resolve to the underlying
+    ///         (planId, subscriber) pair without forcing the caller to pass
+    ///         both. Entries are *never* deleted on cancellation — a freed
+    ///         locator slot would let an attacker re-mint the same id by
+    ///         re-subscribing under collision; keeping the locator pinned
+    ///         keeps the id permanently bound to its original wallet.
+    mapping(bytes32 => SubscriptionLocator) internal _subscriptionLookup;
 
     // ---------------------------------------------------------------------
     // Constructor
@@ -204,6 +230,19 @@ contract BillingHub is ReentrancyGuard {
         address indexed merchant,
         address indexed subscriber,
         uint256 feeAmount
+    );
+
+    /// @notice Emitted when a subscription is cancelled by either the
+    ///         subscriber or the plan's merchant. Once emitted, all future
+    ///         `charge()` calls against the same id revert with
+    ///         `SubscriptionInactive` — effectively a hard-stop guarantee
+    ///         that no further token movement is possible.
+    /// @param  subscriptionId  Deterministic id (`subscriptionIdOf(planId, subscriber)`).
+    /// @param  cancelledBy     Account that submitted the cancellation tx
+    ///                         (always `subscriber` or `plans[planId].merchant`).
+    event Cancelled(
+        bytes32 indexed subscriptionId,
+        address indexed cancelledBy
     );
 
     // ---------------------------------------------------------------------
@@ -315,6 +354,14 @@ contract BillingHub is ReentrancyGuard {
         sub.cyclesCharged = 1;
         sub.cyclesAuthorized = cyclesAuthorized;
         sub.active = true;
+
+        // Pin the deterministic id => (planId, subscriber) mapping so
+        // `cancel(bytes32)` can later resolve the pair without trusting
+        // caller-supplied indices. Idempotent re-write on the same slot if
+        // the same subscriber re-subscribes after a final-cycle deactivation
+        // (the locator value is identical, so no storage churn).
+        _subscriptionLookup[_subscriptionId(planId, msg.sender)] =
+            SubscriptionLocator({planId: planId, subscriber: msg.sender});
 
         emit Subscribed(planId, msg.sender, plan.merchant, cyclesAuthorized, startTime);
 
@@ -447,8 +494,79 @@ contract BillingHub is ReentrancyGuard {
     }
 
     // ---------------------------------------------------------------------
+    // Cancellation API
+    // ---------------------------------------------------------------------
+
+    /// @notice Cancel an active subscription so no further `charge()` can
+    ///         succeed against it.
+    /// @dev    Authorisation: caller MUST be either the subscriber that
+    ///         originally funded the subscription OR the merchant that owns
+    ///         the underlying plan. Any other caller reverts with
+    ///         `Unauthorized()`.
+    ///
+    ///         Semantics:
+    ///           - Sets `subscriptions[planId][subscriber].active = false`.
+    ///             From the next block onwards, `charge()` reverts with
+    ///             `SubscriptionInactive` against this id.
+    ///           - The locator entry in `_subscriptionLookup` is *retained*
+    ///             so the id stays permanently bound to its original
+    ///             (planId, subscriber) pair (see storage NatSpec).
+    ///           - Re-subscribing under the same (planId, subscriber) pair
+    ///             is supported and overwrites the now-inactive Subscription
+    ///             struct in the existing storage slot.
+    ///
+    ///         Non-custodial invariant (§0.3) is trivially preserved: this
+    ///         function performs no token transfers — it only flips a flag.
+    ///         No `nonReentrant` modifier is required for the same reason,
+    ///         but the function is intentionally short and CEI-safe.
+    ///
+    /// @param  subscriptionId  Deterministic id from `subscriptionIdOf()` or
+    ///                         the `_subscriptionId` derivation
+    ///                         `keccak256(abi.encode(planId, subscriber))`.
+    function cancel(bytes32 subscriptionId) external {
+        // -- Checks --
+        SubscriptionLocator memory loc = _subscriptionLookup[subscriptionId];
+        // A subscriber address of zero means the id was never registered via
+        // subscribe() — distinguish this from an "active=false" id so the
+        // caller gets an actionable error.
+        if (loc.subscriber == address(0)) revert SubscriptionNotFound();
+
+        Subscription storage sub = subscriptions[loc.planId][loc.subscriber];
+        // Already inactive — either previously cancelled or naturally
+        // exhausted by the final cycle. Either way, there is nothing to do.
+        if (!sub.active) revert SubscriptionInactive();
+
+        address merchant = plans[loc.planId].merchant;
+        if (msg.sender != loc.subscriber && msg.sender != merchant) {
+            revert Unauthorized();
+        }
+
+        // -- Effects --
+        sub.active = false;
+
+        emit Cancelled(subscriptionId, msg.sender);
+    }
+
+    // ---------------------------------------------------------------------
     // Views
     // ---------------------------------------------------------------------
+
+    /// @notice Pure helper that derives the canonical `bytes32` subscription
+    ///         id for a (planId, subscriber) pair.
+    /// @dev    Exposed so off-chain integrators (UI, subgraph, indexers) can
+    ///         compute the same id the contract uses without re-implementing
+    ///         the encoding rule. `abi.encode` (NOT `encodePacked`) avoids
+    ///         length-ambiguity collisions across heterogeneous arg types.
+    /// @param  planId      Plan identifier.
+    /// @param  subscriber  Subscriber wallet.
+    /// @return id          Deterministic subscription id.
+    function subscriptionIdOf(uint256 planId, address subscriber)
+        external
+        pure
+        returns (bytes32 id)
+    {
+        id = _subscriptionId(planId, subscriber);
+    }
 
     /// @notice Returns true when a subscription is active for (plan, subscriber).
     /// @param  planId      Plan identifier.
@@ -482,5 +600,21 @@ contract BillingHub is ReentrancyGuard {
         }
         uint256 cyclesRemaining = uint256(sub.cyclesAuthorized) - uint256(sub.cyclesCharged);
         remaining = cyclesRemaining * plans[planId].amountPerCycle;
+    }
+
+    // ---------------------------------------------------------------------
+    // Internal
+    // ---------------------------------------------------------------------
+
+    /// @notice Canonical id derivation for a (planId, subscriber) pair.
+    /// @dev    Uses `abi.encode` (NOT `encodePacked`) so the 32-byte
+    ///         left-padding of `address` cannot collide with a numerically
+    ///         equal `uint256 planId` and vice versa.
+    function _subscriptionId(uint256 planId, address subscriber)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(planId, subscriber));
     }
 }

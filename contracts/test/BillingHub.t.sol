@@ -557,6 +557,171 @@ contract BillingHubTest is Test {
         assertEq(hub.remainingAuthorized(planId, subscriber), 0);
     }
 
+    function test_SubscriptionIdOf_DeterministicAndDistinct() public view {
+        // Deterministic: matches the same keccak256(abi.encode(...)) that
+        // `cancel()` uses internally to look up the subscription.
+        bytes32 expected = keccak256(abi.encode(uint256(1), subscriber));
+        assertEq(hub.subscriptionIdOf(1, subscriber), expected);
+
+        // Distinct: any change in either input must produce a different id.
+        assertTrue(
+            hub.subscriptionIdOf(1, subscriber) != hub.subscriptionIdOf(2, subscriber)
+        );
+        assertTrue(
+            hub.subscriptionIdOf(1, subscriber) != hub.subscriptionIdOf(1, merchant)
+        );
+    }
+
+    // ----------------------------------------------------------- cancel
+
+    function test_Cancel_HappyPath_BySubscriber() public {
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        vm.expectEmit(true, true, false, false, address(hub));
+        emit BillingHub.Cancelled(id, subscriber);
+
+        vm.prank(subscriber);
+        hub.cancel(id);
+
+        (,,,, bool active) = hub.subscriptions(planId, subscriber);
+        assertFalse(active);
+        assertFalse(hub.isSubscribed(planId, subscriber));
+    }
+
+    function test_Cancel_HappyPath_ByMerchant() public {
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        vm.expectEmit(true, true, false, false, address(hub));
+        emit BillingHub.Cancelled(id, merchant);
+
+        vm.prank(merchant);
+        hub.cancel(id);
+
+        (,,,, bool active) = hub.subscriptions(planId, subscriber);
+        assertFalse(active);
+    }
+
+    function test_Cancel_RevertsForUnauthorizedThirdParty() public {
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        // A relayer (anyone allowed to *charge*) is NOT allowed to cancel —
+        // only subscriber or merchant. Per AI guidelines §4 access-control.
+        vm.prank(relayer);
+        vm.expectRevert(BillingHub.Unauthorized.selector);
+        hub.cancel(id);
+
+        // Subscription must still be active after the failed attempt.
+        (,,,, bool active) = hub.subscriptions(planId, subscriber);
+        assertTrue(active);
+    }
+
+    function test_Cancel_RevertsOnUnknownSubscription() public {
+        // Brand-new id — never registered via subscribe().
+        bytes32 ghostId = bytes32(uint256(0xDEADBEEF));
+        vm.prank(subscriber);
+        vm.expectRevert(BillingHub.SubscriptionNotFound.selector);
+        hub.cancel(ghostId);
+
+        // Even after a plan exists, an id that was never subscribed to must
+        // still revert with SubscriptionNotFound (not Unauthorized) — the
+        // lookup is keyed by id, not by plan.
+        uint256 planId = _createDefaultPlan();
+        bytes32 unsubscribedId = hub.subscriptionIdOf(planId, subscriber);
+        vm.prank(subscriber);
+        vm.expectRevert(BillingHub.SubscriptionNotFound.selector);
+        hub.cancel(unsubscribedId);
+    }
+
+    function test_Cancel_RevertsOnAlreadyCancelled() public {
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        vm.prank(subscriber);
+        hub.cancel(id);
+
+        vm.prank(subscriber);
+        vm.expectRevert(BillingHub.SubscriptionInactive.selector);
+        hub.cancel(id);
+    }
+
+    function test_Cancel_RevertsAfterFinalCycleNaturalExhaustion() public {
+        // Two-cycle plan: subscribe() charges cycle 1, charge() settles
+        // cycle 2 and deactivates the subscription. Cancel must then revert
+        // with SubscriptionInactive (not SubscriptionNotFound — the locator
+        // is still pinned, just `active=false`), proving cancel() correctly
+        // distinguishes "never registered" from "previously deactivated".
+        vm.prank(merchant);
+        uint256 planId =
+            hub.createPlan(address(token), AMOUNT_PER_CYCLE, CYCLE_LENGTH, 2);
+
+        uint256 value = AMOUNT_PER_CYCLE * 2; // bounded permit for 2 cycles
+        uint256 deadline = block.timestamp + 1 days;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signPermit(subscriberPk, address(hub), value, deadline);
+        vm.prank(subscriber);
+        hub.subscribe(planId, 2, deadline, v, r, s);
+
+        // Settle cycle 2 — this triggers the final-cycle deactivation branch
+        // in charge() (`newCycleNumber == cyclesAuthorized`).
+        vm.warp(block.timestamp + CYCLE_LENGTH);
+        vm.prank(relayer);
+        hub.charge(planId, subscriber);
+
+        (,,,, bool active) = hub.subscriptions(planId, subscriber);
+        assertFalse(active);
+
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+        vm.prank(subscriber);
+        vm.expectRevert(BillingHub.SubscriptionInactive.selector);
+        hub.cancel(id);
+    }
+
+    function test_Cancel_BlocksFutureCharges() public {
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        vm.prank(subscriber);
+        hub.cancel(id);
+
+        // Warp well past the next-due time. Without cancel, this would settle
+        // cleanly. With cancel, charge() must revert with SubscriptionInactive.
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(relayer);
+        vm.expectRevert(BillingHub.SubscriptionInactive.selector);
+        hub.charge(planId, subscriber);
+
+        // No tokens moved to merchant beyond the original first-cycle charge,
+        // and no extra fee accrued at the treasury.
+        assertEq(token.balanceOf(merchant), MERCHANT_PER_CYCLE);
+        assertEq(token.balanceOf(treasury), FEE_PER_CYCLE);
+    }
+
+    function test_Cancel_AllowsResubscribeOnSameSlot() public {
+        // Cancellation MUST NOT brick the (planId, subscriber) pair. The
+        // same wallet can re-subscribe after cancel — same locator id is
+        // re-used (idempotent slot write), so the subscription lifecycle is
+        // fully recoverable.
+        uint256 planId = _createDefaultPlan();
+        _subscribeFull(planId, subscriberPk);
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+
+        vm.prank(subscriber);
+        hub.cancel(id);
+
+        // Re-subscribe — must succeed and the locator id must stay identical.
+        _subscribeFull(planId, subscriberPk);
+        assertEq(hub.subscriptionIdOf(planId, subscriber), id);
+        assertTrue(hub.isSubscribed(planId, subscriber));
+    }
+
     // ----------------------------------------------------- fuzz: fee math
 
     /// @notice Fuzz the closed-form fee math against the contract's actual
@@ -604,6 +769,11 @@ contract BillingHubHandler is Test {
     ///         protocol. The conservation invariant uses this to assert that
     ///         every base unit ends up at either `merchant` or `treasury`.
     uint256 public totalSpent;
+
+    /// @notice planIds whose subscription has been cancelled at least once.
+    ///         Used by `invariant_CancelledSubsAreInactive` to assert that
+    ///         once cancelled, a subscription stays inactive forever.
+    uint256[] public cancelledPlanIds;
 
     constructor(BillingHub _hub, MockERC20Permit _token, address _subscriber) {
         hub = _hub;
@@ -657,6 +827,28 @@ contract BillingHubHandler is Test {
             totalSpent += amount;
         } catch {}
     }
+
+    /// @notice Randomly cancel a subscription as the subscriber. Cancellation
+    ///         must (a) succeed at most once per (planId, subscriber) pair
+    ///         and (b) prevent every subsequent `chargeRandom` against the
+    ///         same id from incrementing `totalSpent`.
+    function cancelRandom(uint256 idx) external {
+        if (planIds.length == 0) return;
+        idx = bound(idx, 0, planIds.length - 1);
+        uint256 planId = planIds[idx];
+        bytes32 id = hub.subscriptionIdOf(planId, subscriber);
+        vm.prank(subscriber);
+        try hub.cancel(id) {
+            cancelledPlanIds.push(planId);
+        } catch {
+            // Sub may already be cancelled, exhausted, or never created —
+            // any revert path is fine; the invariant covers post-cancel state.
+        }
+    }
+
+    function cancelledCount() external view returns (uint256) {
+        return cancelledPlanIds.length;
+    }
 }
 
 /// @notice Invariant suite. The protocol must:
@@ -694,5 +886,19 @@ contract BillingHubInvariantTest is Test {
             token.balanceOf(merchant) + token.balanceOf(treasury),
             handler.totalSpent()
         );
+    }
+
+    /// @notice Once a subscription is cancelled, it MUST stay inactive
+    ///         forever — no `charge()`, no fuzz path, no replay can revive
+    ///         it. Combined with the `SubscriptionInactive` revert in
+    ///         `charge()`, this proves the hard-stop guarantee: a cancelled
+    ///         subscription can never be billed again.
+    function invariant_CancelledSubsAreInactive() public view {
+        uint256 n = handler.cancelledCount();
+        for (uint256 i = 0; i < n; i++) {
+            uint256 planId = handler.cancelledPlanIds(i);
+            (,,,, bool active) = hub.subscriptions(planId, handler.subscriber());
+            assertFalse(active);
+        }
     }
 }
