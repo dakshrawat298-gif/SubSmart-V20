@@ -1,0 +1,17 @@
+{
+  "name": "subsmart-gelato",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test:w3f": "npx @gelatonetwork/web3-functions-sdk@latest w3f test web3-functions/charge/index.ts --show-logs",
+    "deploy:w3f": "npx @gelatonetwork/web3-functions-sdk@latest w3f deploy web3-functions/charge/index.ts"
+  },
+  "dependencies": {
+    "@gelatonetwork/web3-functions-sdk": "^2.4.0",
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

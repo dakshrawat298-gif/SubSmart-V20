@@ -17,6 +17,7 @@ Completed:
 - Phase 6: Merchant Dashboard at `/merchant` wired through wagmi v2 — token allow-list, simulate-first, explicit chainId, decoded reverts, immediate Polygonscan link.
 - Phase 7: Customer Checkout Flow at `/checkout/[planId]` — bounded EIP-2612 permit, AllowanceDisclosure panel, 10-state `useSubscribe` hook, zero TypeScript errors.
 - Phase 8: Forge deployment script (`contracts/script/Deploy.s.sol`), `foundry.toml` RPC + Etherscan config for Amoy, `.env.example`, and full deployment runbook (`docs/4_DEPLOYMENT.md`).
+- Phase 9: Gelato Web3 Function (`gelato/web3-functions/charge/index.ts`) — event-driven subscription discovery, rotating cursor, eth_call simulation guard, persistent Gelato storage state, and full operator runbook (`docs/5_GELATO_AUTOMATION.md`).
 
 ## Stack
 
