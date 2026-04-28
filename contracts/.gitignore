@@ -1,0 +1,12 @@
+# Foundry build artifacts
+out/
+cache/
+broadcast/
+
+# Dependencies installed via `forge install` (re-fetched on demand)
+lib/
+
+# Local environment
+.env
+.env.*
+!.env.example

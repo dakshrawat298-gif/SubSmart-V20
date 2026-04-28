@@ -1,0 +1,30 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+bytecode_hash = "none"
+cbor_metadata = false
+remappings = [
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+[fmt]
+line_length = 100
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+
+# To bootstrap dependencies (one-time, run inside the contracts/ folder):
+#   forge install OpenZeppelin/openzeppelin-contracts@v5.0.2 --no-commit
+#   forge install foundry-rs/forge-std --no-commit
+# Then:
+#   forge build
