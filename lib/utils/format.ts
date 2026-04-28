@@ -1,3 +1,4 @@
+import { formatUnits } from "viem";
 import type { Chain } from "viem";
 
 /**
@@ -21,6 +22,51 @@ export const CYCLE_PRESETS = [
 }>;
 
 export type CyclePreset = (typeof CYCLE_PRESETS)[number];
+
+/**
+ * Format a token amount (bigint in base units) to a human-readable string.
+ * Uses viem's `formatUnits` for precision, then trims unnecessary trailing
+ * zeros while keeping at least 2 decimal places.
+ *
+ * @example formatTokenAmount(25_000_000n, 6) → "25.00"
+ */
+export function formatTokenAmount(amount: bigint, decimals: number): string {
+  const raw = formatUnits(amount, decimals);
+  const num = parseFloat(raw);
+  if (Number.isNaN(num)) return raw;
+  const fixed = num.toFixed(Math.min(decimals, 6));
+  const trimmed = fixed.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ".00");
+  return trimmed;
+}
+
+/**
+ * Convert a cycle length in seconds to a short human-readable label.
+ *
+ * @example formatCycleLengthHuman(2_592_000) → "30 days"
+ */
+export function formatCycleLengthHuman(seconds: bigint | number): string {
+  const s = Number(seconds);
+  if (s === 86_400) return "day";
+  if (s === 604_800) return "week";
+  if (s === 2_592_000) return "30 days";
+  if (s === 7_776_000) return "90 days";
+  if (s === 31_536_000) return "year";
+  const days = Math.round(s / 86_400);
+  return `${days} days`;
+}
+
+/**
+ * Format a Unix timestamp (seconds) as a locale date string.
+ *
+ * @example formatDeadline(1_800_000_000) → "January 15, 2027"
+ */
+export function formatDeadline(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 /**
  * Builds a Polygonscan transaction URL for the supplied chain. Falls back to
