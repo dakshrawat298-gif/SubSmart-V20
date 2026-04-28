@@ -12,7 +12,7 @@ export const SUPPORTED_CHAIN_IDS: ReadonlyArray<number> = SUPPORTED_CHAINS.map(
   (c) => c.id
 );
 
-export const DEFAULT_CHAIN: Chain = polygon;
+export const DEFAULT_CHAIN = polygon;
 
 export function isSupportedChainId(chainId: number | undefined): boolean {
   if (chainId === undefined) return false;
