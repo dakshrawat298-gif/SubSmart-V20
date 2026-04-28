@@ -189,6 +189,23 @@ contract BillingHub is ReentrancyGuard {
         uint64 nextChargeTime
     );
 
+    /// @notice Emitted whenever a `PROTOCOL_FEE_BPS` slice is routed from a
+    ///         subscriber to the protocol treasury. Indexed on (merchant,
+    ///         subscriber) so the off-chain revenue dashboard can group fee
+    ///         flow by either party in O(1) without a full event scan.
+    /// @dev    Emitted *only* when `feeAmount > 0`. The corresponding
+    ///         `Charged` event carries the gross `amountPerCycle`; subtract
+    ///         `feeAmount` to derive what the merchant received.
+    /// @param  merchant    Recipient of the merchant-side leg of the same
+    ///                     settlement (indexed for revenue-by-merchant queries).
+    /// @param  subscriber  Wallet that funded both legs of the split.
+    /// @param  feeAmount   Token base units forwarded to `treasury`.
+    event FeeCollected(
+        address indexed merchant,
+        address indexed subscriber,
+        uint256 feeAmount
+    );
+
     // ---------------------------------------------------------------------
     // Merchant API
     // ---------------------------------------------------------------------
@@ -320,10 +337,22 @@ contract BillingHub is ReentrancyGuard {
             );
         }
 
-        // First-cycle charge: pulled directly to the merchant. The protocol
-        // never receives the funds — this preserves the non-custodial
-        // invariant in AI guidelines §0.3.
-        token.safeTransferFrom(msg.sender, plan.merchant, plan.amountPerCycle);
+        // First-cycle charge: same fee split as `charge()` so every cycle —
+        // from the activation cycle onwards — generates protocol revenue.
+        // `merchantAmount + feeAmount == plan.amountPerCycle` by
+        // construction; subscriber is debited exactly `amountPerCycle`,
+        // matching the bounded permit value committed off-chain.
+        uint256 feeAmount =
+            (plan.amountPerCycle * PROTOCOL_FEE_BPS) / FEE_DENOMINATOR;
+        uint256 merchantAmount = plan.amountPerCycle - feeAmount;
+
+        // Both legs flow subscriber -> recipient directly. The §0.3
+        // non-custodial invariant holds: the contract never receives funds.
+        token.safeTransferFrom(msg.sender, plan.merchant, merchantAmount);
+        if (feeAmount != 0) {
+            token.safeTransferFrom(msg.sender, treasury, feeAmount);
+            emit FeeCollected(plan.merchant, msg.sender, feeAmount);
+        }
 
         emit Charged(
             planId, msg.sender, plan.merchant, plan.amountPerCycle, 1, nextChargeTime
@@ -404,6 +433,7 @@ contract BillingHub is ReentrancyGuard {
             // creation). It also avoids a wasteful zero-value transferFrom
             // on tokens that revert on zero amounts.
             token.safeTransferFrom(subscriber, treasury, feeAmount);
+            emit FeeCollected(plan.merchant, subscriber, feeAmount);
         }
 
         emit Charged(

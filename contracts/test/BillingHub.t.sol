@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {BillingHub} from "../src/BillingHub.sol";
 import {ERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "openzeppelin-contracts/token/ERC20/extensions/ERC20Permit.sol";
@@ -20,14 +21,16 @@ contract MockERC20Permit is ERC20Permit {
     }
 }
 
-/// @notice Unit + branch tests for BillingHub.sol covering createPlan,
-///         subscribe, and the relayer-facing charge() function.
+/// @notice Unit + branch tests for BillingHub.sol covering the constructor,
+///         createPlan, subscribe, and the relayer-facing charge() function,
+///         including the 0.5% protocol fee split and FeeCollected event.
 contract BillingHubTest is Test {
     BillingHub internal hub;
     MockERC20Permit internal token;
 
     address internal merchant = address(0xBEEF);
     address internal relayer = address(0xCAFE);
+    address internal treasury = address(0x7E5);
 
     uint256 internal subscriberPk = uint256(keccak256("subscriber"));
     address internal subscriber;
@@ -38,6 +41,10 @@ contract BillingHubTest is Test {
     uint256 internal constant AMOUNT_PER_CYCLE = 10e6; // 10 mUSDC
     uint64 internal constant CYCLE_LENGTH = 30 days;
     uint32 internal constant MAX_CYCLES = 12;
+
+    // Derived from PROTOCOL_FEE_BPS = 50 / FEE_DENOMINATOR = 10_000.
+    uint256 internal constant FEE_PER_CYCLE = (AMOUNT_PER_CYCLE * 50) / 10_000;
+    uint256 internal constant MERCHANT_PER_CYCLE = AMOUNT_PER_CYCLE - FEE_PER_CYCLE;
 
     bytes32 internal constant PERMIT_TYPEHASH = keccak256(
         "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
@@ -66,9 +73,14 @@ contract BillingHubTest is Test {
         uint32 cycleNumber,
         uint64 nextChargeTime
     );
+    event FeeCollected(
+        address indexed merchant,
+        address indexed subscriber,
+        uint256 feeAmount
+    );
 
     function setUp() public {
-        hub = new BillingHub();
+        hub = new BillingHub(treasury);
         token = new MockERC20Permit();
         subscriber = vm.addr(subscriberPk);
         otherSubscriber = vm.addr(otherPk);
@@ -111,8 +123,9 @@ contract BillingHubTest is Test {
 
     /// @dev BillingHub has no on-chain deactivatePlan() yet, so this test
     ///      helper flips the active flag via direct storage manipulation.
-    ///      Storage layout (verified):
+    ///      Storage layout (verified after the constants/immutables refactor):
     ///        slot 0: ReentrancyGuard._status (uint256)
+    ///        Constants and immutables live in code, NOT storage.
     ///        slot 1: BillingHub.nextPlanId (uint256)
     ///        slot 2: plans mapping pointer
     ///        slot 3: subscriptions mapping pointer
@@ -128,6 +141,26 @@ contract BillingHubTest is Test {
         bytes32 cur = vm.load(address(hub), packedSlot);
         bytes32 mask = bytes32(uint256(0xff) << 96);
         vm.store(address(hub), packedSlot, cur & ~mask);
+    }
+
+    // --------------------------------------------------------------- constants
+
+    function test_Constants_FeeBpsAndDenominator() public view {
+        assertEq(hub.PROTOCOL_FEE_BPS(), 50);
+        // Sanity: 10 mUSDC * 50 / 10_000 == 50_000 base units (== 0.05 mUSDC).
+        assertEq(FEE_PER_CYCLE, 50_000);
+        assertEq(MERCHANT_PER_CYCLE, 9_950_000);
+    }
+
+    // ------------------------------------------------------------ constructor
+
+    function test_Constructor_SetsTreasury() public view {
+        assertEq(hub.treasury(), treasury);
+    }
+
+    function test_Constructor_RevertsOnZeroTreasury() public {
+        vm.expectRevert(BillingHub.InvalidTreasury.selector);
+        new BillingHub(address(0));
     }
 
     // ----------------------------------------------------------- createPlan
@@ -181,16 +214,20 @@ contract BillingHubTest is Test {
 
     // ------------------------------------------------------------- subscribe
 
-    function test_Subscribe_HappyPath_FullCycles() public {
+    function test_Subscribe_HappyPath_FullCycles_FeeSplit() public {
         uint256 planId = _createDefaultPlan();
         uint256 value = AMOUNT_PER_CYCLE * uint256(MAX_CYCLES);
         uint256 deadline = block.timestamp + 365 days;
         (uint8 v, bytes32 r, bytes32 s) = _signPermit(subscriberPk, address(hub), value, deadline);
 
         uint256 mBalBefore = token.balanceOf(merchant);
+        uint256 tBalBefore = token.balanceOf(treasury);
+        uint256 sBalBefore = token.balanceOf(subscriber);
 
         vm.expectEmit(true, true, true, true);
         emit Subscribed(planId, subscriber, merchant, MAX_CYCLES, uint64(block.timestamp));
+        vm.expectEmit(true, true, true, true);
+        emit FeeCollected(merchant, subscriber, FEE_PER_CYCLE);
         vm.expectEmit(true, true, true, true);
         emit Charged(
             planId,
@@ -212,8 +249,12 @@ contract BillingHubTest is Test {
         assertEq(auth, MAX_CYCLES);
         assertTrue(active);
 
-        assertEq(token.balanceOf(merchant), mBalBefore + AMOUNT_PER_CYCLE);
+        // 99.5% to merchant, 0.5% to treasury, customer debited the gross.
+        assertEq(token.balanceOf(merchant), mBalBefore + MERCHANT_PER_CYCLE);
+        assertEq(token.balanceOf(treasury), tBalBefore + FEE_PER_CYCLE);
+        assertEq(token.balanceOf(subscriber), sBalBefore - AMOUNT_PER_CYCLE);
         assertEq(token.balanceOf(address(hub)), 0); // non-custodial invariant
+        // Allowance debited by both legs (merchantAmount + feeAmount == amountPerCycle).
         assertEq(token.allowance(subscriber, address(hub)), value - AMOUNT_PER_CYCLE);
     }
 
@@ -314,9 +355,12 @@ contract BillingHubTest is Test {
         (,, uint32 charged,, bool active) = hub.subscriptions(planId, subscriber);
         assertEq(charged, 1);
         assertTrue(active);
+        // Both legs of the fee split debited the existing allowance.
+        assertEq(token.balanceOf(merchant), MERCHANT_PER_CYCLE);
+        assertEq(token.balanceOf(treasury), FEE_PER_CYCLE);
     }
 
-    function test_Subscribe_TwoSubscribersSamePlan() public {
+    function test_Subscribe_TwoSubscribersSamePlan_FeeAccrues() public {
         uint256 planId = _createDefaultPlan();
         _subscribeFull(planId, subscriberPk);
         _subscribeFull(planId, otherPk);
@@ -325,6 +369,36 @@ contract BillingHubTest is Test {
         (,,,, bool a2) = hub.subscriptions(planId, otherSubscriber);
         assertTrue(a1);
         assertTrue(a2);
+        // Treasury collected one fee per first-cycle charge.
+        assertEq(token.balanceOf(treasury), 2 * FEE_PER_CYCLE);
+        assertEq(token.balanceOf(merchant), 2 * MERCHANT_PER_CYCLE);
+    }
+
+    function test_Subscribe_RoundsDownToZeroFee_NoEventEmitted() public {
+        // amountPerCycle = 199 base units. 199 * 50 / 10_000 = 0 (integer
+        // division). The fee leg must be skipped so we don't waste gas /
+        // emit a no-op event, AND no zero-value safeTransferFrom is sent
+        // (some hostile ERC-20s revert on zero amounts).
+        uint256 tinyAmount = 199;
+        vm.prank(merchant);
+        uint256 planId = hub.createPlan(address(token), tinyAmount, CYCLE_LENGTH, 1);
+
+        uint256 value = tinyAmount;
+        uint256 deadline = block.timestamp + 365 days;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(subscriberPk, address(hub), value, deadline);
+
+        // Recording logs lets us assert the exact event topology.
+        vm.recordLogs();
+        vm.prank(subscriber);
+        hub.subscribe(planId, 1, deadline, v, r, s);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 feeTopic = keccak256("FeeCollected(address,address,uint256)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != feeTopic, "FeeCollected must not emit at zero fee");
+        }
+        assertEq(token.balanceOf(merchant), tinyAmount); // 100% to merchant
+        assertEq(token.balanceOf(treasury), 0);
     }
 
     // ---------------------------------------------------------------- charge
@@ -344,7 +418,7 @@ contract BillingHubTest is Test {
         hub.charge(planId, subscriber);
     }
 
-    function test_Charge_HappyPath_AnyoneCanRelay() public {
+    function test_Charge_HappyPath_AnyoneCanRelay_FeeSplit() public {
         uint256 planId = _createDefaultPlan();
         _subscribeFull(planId, subscriberPk);
 
@@ -353,7 +427,10 @@ contract BillingHubTest is Test {
         uint64 expectedNext = firstNext + CYCLE_LENGTH;
 
         uint256 mBalBefore = token.balanceOf(merchant);
+        uint256 tBalBefore = token.balanceOf(treasury);
 
+        vm.expectEmit(true, true, true, true);
+        emit FeeCollected(merchant, subscriber, FEE_PER_CYCLE);
         vm.expectEmit(true, true, true, true);
         emit Charged(planId, subscriber, merchant, AMOUNT_PER_CYCLE, 2, expectedNext);
 
@@ -366,7 +443,8 @@ contract BillingHubTest is Test {
         assertEq(nextChargeTime, expectedNext);
         assertEq(charged, 2);
         assertTrue(active);
-        assertEq(token.balanceOf(merchant), mBalBefore + AMOUNT_PER_CYCLE);
+        assertEq(token.balanceOf(merchant), mBalBefore + MERCHANT_PER_CYCLE);
+        assertEq(token.balanceOf(treasury), tBalBefore + FEE_PER_CYCLE);
         assertEq(token.balanceOf(address(hub)), 0); // non-custodial
     }
 
@@ -392,13 +470,17 @@ contract BillingHubTest is Test {
         assertFalse(active);
         assertEq(hub.remainingAuthorized(planId, subscriber), 0);
 
+        // Treasury / merchant accumulated exactly two cycles' worth.
+        assertEq(token.balanceOf(treasury), 2 * FEE_PER_CYCLE);
+        assertEq(token.balanceOf(merchant), 2 * MERCHANT_PER_CYCLE);
+
         // Subsequent charge fails because subscription is now inactive.
         vm.warp(block.timestamp + CYCLE_LENGTH);
         vm.expectRevert(BillingHub.SubscriptionInactive.selector);
         hub.charge(planId, subscriber);
     }
 
-    function test_Charge_ConsecutiveCyclesAdvanceState() public {
+    function test_Charge_ConsecutiveCyclesAdvanceState_FeeSums() public {
         uint256 planId = _createDefaultPlan();
         _subscribeFull(planId, subscriberPk);
 
@@ -411,7 +493,14 @@ contract BillingHubTest is Test {
 
         (,,,, bool active) = hub.subscriptions(planId, subscriber);
         assertFalse(active);
-        assertEq(token.balanceOf(merchant), uint256(MAX_CYCLES) * AMOUNT_PER_CYCLE);
+        // Across MAX_CYCLES cycles: merchant got 99.5%, treasury got 0.5%,
+        // hub never custodied a single base unit.
+        assertEq(token.balanceOf(merchant), uint256(MAX_CYCLES) * MERCHANT_PER_CYCLE);
+        assertEq(token.balanceOf(treasury), uint256(MAX_CYCLES) * FEE_PER_CYCLE);
+        assertEq(
+            token.balanceOf(merchant) + token.balanceOf(treasury),
+            uint256(MAX_CYCLES) * AMOUNT_PER_CYCLE
+        );
         assertEq(token.balanceOf(address(hub)), 0);
     }
 
@@ -419,9 +508,11 @@ contract BillingHubTest is Test {
         uint256 planId = _createDefaultPlan();
         _subscribeFull(planId, subscriberPk);
 
-        // Drain the subscriber's wallet.
+        // Drain the subscriber's wallet. Capture the balance BEFORE the
+        // prank — `balanceOf` would otherwise consume the prank.
+        uint256 bal = token.balanceOf(subscriber);
         vm.prank(subscriber);
-        token.transfer(address(0xDEAD), token.balanceOf(subscriber));
+        token.transfer(address(0xDEAD), bal);
 
         vm.warp(block.timestamp + CYCLE_LENGTH);
         // SafeERC20 bubbles up the underlying ERC20InsufficientBalance error.
@@ -447,12 +538,60 @@ contract BillingHubTest is Test {
         (, uint64 nextChargeTime, uint32 charged,,) = hub.subscriptions(planId, subscriber);
         assertEq(charged, 2);
         assertEq(nextChargeTime, firstNext + CYCLE_LENGTH);
+        // Two fees accrued total: cycle 1 (subscribe()) + cycle 2 (charge()).
+        // No retroactive double-charging — only ONE charge() advanced state.
+        assertEq(token.balanceOf(treasury), 2 * FEE_PER_CYCLE);
+    }
+
+    // ------------------------------------------------------------ views
+
+    function test_IsSubscribed_TracksLifecycle() public {
+        uint256 planId = _createDefaultPlan();
+        assertFalse(hub.isSubscribed(planId, subscriber));
+        _subscribeFull(planId, subscriberPk);
+        assertTrue(hub.isSubscribed(planId, subscriber));
+    }
+
+    function test_RemainingAuthorized_ReturnsZeroForUnknownSubscription() public {
+        uint256 planId = _createDefaultPlan();
+        assertEq(hub.remainingAuthorized(planId, subscriber), 0);
+    }
+
+    // ----------------------------------------------------- fuzz: fee math
+
+    /// @notice Fuzz the closed-form fee math against the contract's actual
+    ///         transfer behaviour for a single charge. Bounds are picked so
+    ///         the subscriber's mint covers the cycle and the multiplication
+    ///         cannot overflow (`amount` ≤ 2^96 keeps fee calc safe).
+    function testFuzz_Charge_FeeSplitMatchesFormula(uint256 amount) public {
+        amount = bound(amount, 1, type(uint96).max);
+        // Top up so the subscriber definitely has enough to cover one cycle.
+        token.mint(subscriber, amount);
+
+        vm.prank(merchant);
+        uint256 planId = hub.createPlan(address(token), amount, CYCLE_LENGTH, 1);
+
+        uint256 deadline = block.timestamp + 365 days;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(subscriberPk, address(hub), amount, deadline);
+
+        uint256 mBalBefore = token.balanceOf(merchant);
+        uint256 tBalBefore = token.balanceOf(treasury);
+
+        vm.prank(subscriber);
+        hub.subscribe(planId, 1, deadline, v, r, s);
+
+        uint256 expectedFee = (amount * 50) / 10_000;
+        uint256 expectedMerchant = amount - expectedFee;
+        assertEq(token.balanceOf(merchant) - mBalBefore, expectedMerchant);
+        assertEq(token.balanceOf(treasury) - tBalBefore, expectedFee);
+        assertEq(token.balanceOf(address(hub)), 0);
     }
 }
 
 /// @notice Randomised handler for the BillingHub invariant suite. Drives
 ///         createPlan / subscribe / charge sequences and exposes the protocol
-///         to the `protocolBalanceIsZero` invariant after every call.
+///         to the `protocolBalanceIsZero` and `treasuryConservation`
+///         invariants after every call.
 contract BillingHubHandler is Test {
     BillingHub public hub;
     MockERC20Permit public token;
@@ -460,6 +599,11 @@ contract BillingHubHandler is Test {
     address public merchant = address(0xBEEF);
 
     uint256[] public planIds;
+
+    /// @notice Cumulative tokens the subscriber has spent through the
+    ///         protocol. The conservation invariant uses this to assert that
+    ///         every base unit ends up at either `merchant` or `treasury`.
+    uint256 public totalSpent;
 
     constructor(BillingHub _hub, MockERC20Permit _token, address _subscriber) {
         hub = _hub;
@@ -495,6 +639,7 @@ contract BillingHubHandler is Test {
             planId, cyclesAuth, block.timestamp + 365 days, 27, bytes32(0), bytes32(0)
         ) {
             planIds.push(planId);
+            totalSpent += amount; // First-cycle charge succeeded.
         } catch {
             // Same subscriber may already have an active sub for this id; ignore.
         }
@@ -505,21 +650,29 @@ contract BillingHubHandler is Test {
         idx = bound(idx, 0, planIds.length - 1);
         timeJump = bound(timeJump, 1, 60 days);
         vm.warp(block.timestamp + timeJump);
-        try hub.charge(planIds[idx], subscriber) {} catch {}
+        // Read the per-cycle amount BEFORE the call so we can credit
+        // totalSpent only on success.
+        (,, uint256 amount,,,) = hub.plans(planIds[idx]);
+        try hub.charge(planIds[idx], subscriber) {
+            totalSpent += amount;
+        } catch {}
     }
 }
 
-/// @notice Invariant: BillingHub never holds the subscription token. Any
-///         non-zero protocol balance would violate the §0.3 non-custodial
-///         invariant from docs/3_AI_CODING_GUIDELINES.md.
+/// @notice Invariant suite. The protocol must:
+///           1. Hold zero subscription tokens at all times (§0.3).
+///           2. Conserve every base unit the subscriber spends — sum of
+///              merchant + treasury balances must equal cumulative spend.
 contract BillingHubInvariantTest is Test {
     BillingHub public hub;
     MockERC20Permit public token;
     BillingHubHandler public handler;
     address public subscriber;
+    address public merchant = address(0xBEEF);
+    address public treasury = address(0x7E5);
 
     function setUp() public {
-        hub = new BillingHub();
+        hub = new BillingHub(treasury);
         token = new MockERC20Permit();
         subscriber = address(0xC0FFEE);
         token.mint(subscriber, 1_000_000_000e6);
@@ -528,8 +681,18 @@ contract BillingHubInvariantTest is Test {
     }
 
     /// @notice The protocol contract MUST hold zero subscription tokens at
-    ///         all times. Funds always go subscriber → merchant directly.
+    ///         all times. Funds always go subscriber → merchant + treasury.
     function invariant_ProtocolBalanceIsZero() public view {
         assertEq(token.balanceOf(address(hub)), 0);
+    }
+
+    /// @notice Every base unit the subscriber spent through the protocol must
+    ///         have landed at either the merchant or the treasury — nothing
+    ///         is ever burned, lost, or stuck inside the contract.
+    function invariant_TreasuryAndMerchantConserveSpend() public view {
+        assertEq(
+            token.balanceOf(merchant) + token.balanceOf(treasury),
+            handler.totalSpent()
+        );
     }
 }
