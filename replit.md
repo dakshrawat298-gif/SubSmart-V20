@@ -4,16 +4,19 @@ A decentralized, non-custodial recurring billing protocol for Web3 SaaS on Polyg
 
 ## Project status
 
-Phase 6 in progress — frontend ↔ smart-contract integration. Architecture and product documentation lives under [`docs/`](./docs):
+Phase 8 complete — deployment scripting ready. Architecture and product documentation lives under [`docs/`](./docs):
 
 - [`docs/1_PRD.md`](./docs/1_PRD.md) — Product Requirements Document
 - [`docs/2_SYSTEM_DESIGN.md`](./docs/2_SYSTEM_DESIGN.md) — Technical architecture
 - [`docs/3_AI_CODING_GUIDELINES.md`](./docs/3_AI_CODING_GUIDELINES.md) — Mandatory rules for AI-assisted contributions
+- [`docs/4_DEPLOYMENT.md`](./docs/4_DEPLOYMENT.md) — Step-by-step Amoy deployment runbook
 
 Completed:
 
 - Phases 1–5: `BillingHub.sol` ships protocol fees, `cancel(bytes32)`, `Cancelled` event, subscription locator, plus 38/38 unit tests + 3/3 invariants and 100% line/branch coverage.
-- Phase 6 (this milestone): Merchant Dashboard at `/merchant` wired through wagmi v2 — token allow-list, simulate-first, explicit chainId, decoded reverts, immediate Polygonscan link.
+- Phase 6: Merchant Dashboard at `/merchant` wired through wagmi v2 — token allow-list, simulate-first, explicit chainId, decoded reverts, immediate Polygonscan link.
+- Phase 7: Customer Checkout Flow at `/checkout/[planId]` — bounded EIP-2612 permit, AllowanceDisclosure panel, 10-state `useSubscribe` hook, zero TypeScript errors.
+- Phase 8: Forge deployment script (`contracts/script/Deploy.s.sol`), `foundry.toml` RPC + Etherscan config for Amoy, `.env.example`, and full deployment runbook (`docs/4_DEPLOYMENT.md`).
 
 ## Stack
 

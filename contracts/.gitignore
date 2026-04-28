@@ -1,7 +1,9 @@
 # Foundry build artifacts
 out/
 cache/
-broadcast/
+
+# Keep broadcast receipts for on-chain audit trail; only skip dry-run runs.
+broadcast/*/dry-run/
 
 # Dependencies installed via `forge install` (re-fetched on demand)
 lib/

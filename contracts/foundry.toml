@@ -23,6 +23,15 @@ int_types = "long"
 quote_style = "double"
 number_underscore = "thousands"
 
+# Named RPC endpoints — forge script --rpc-url amoy resolves to $AMOY_RPC_URL.
+[rpc_endpoints]
+amoy = "${AMOY_RPC_URL}"
+
+# Etherscan/Polygonscan config for --verify.
+# The Amoy block explorer API is compatible with the standard Etherscan API.
+[etherscan]
+amoy = { key = "${POLYGONSCAN_API_KEY}", url = "https://api-amoy.polygonscan.com/api" }
+
 # To bootstrap dependencies (one-time, run inside the contracts/ folder):
 #   forge install OpenZeppelin/openzeppelin-contracts@v5.0.2 --no-commit
 #   forge install foundry-rs/forge-std --no-commit
