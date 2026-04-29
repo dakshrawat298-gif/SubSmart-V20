@@ -2,12 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAccount, useChainId, usePublicClient } from "wagmi";
-import {
-  parseAbi,
-  parseAbiItem,
-  encodeAbiParameters,
-  keccak256,
-} from "viem";
+import { parseAbi, parseAbiItem, encodeAbiParameters, keccak256 } from "viem";
 import type { Address } from "viem";
 import { getBillingHubAddress } from "@/lib/chain/billingHub";
 
@@ -28,7 +23,7 @@ const TOKEN_ABI = parseAbi([
 // `subscriber` is the second indexed topic on the Subscribed event —
 // getLogs with args: { subscriber } filters by topic[2] = account.
 const SUBSCRIBED_EVENT = parseAbiItem(
-  "event Subscribed(uint256 indexed planId, address indexed subscriber, address indexed merchant, uint32 cyclesAuthorized, uint64 startTime)"
+  "event Subscribed(uint256 indexed planId, address indexed subscriber, address indexed merchant, uint32 cyclesAuthorized, uint64 startTime)",
 );
 
 // ── Public types ───────────────────────────────────────────────────────────
@@ -110,7 +105,7 @@ export function useCustomerSubscriptions(): {
           address: hubAddress,
           event: SUBSCRIBED_EVENT,
           args: { subscriber: account },
-          fromBlock: 0n,
+          fromBlock: 37488000n,
           toBlock: "latest",
         });
 
@@ -156,7 +151,7 @@ export function useCustomerSubscriptions(): {
               }),
             ]);
             return { planId, sub, plan };
-          })
+          }),
         );
 
         if (cancelled) return;
@@ -203,7 +198,7 @@ export function useCustomerSubscriptions(): {
                 symbol: `${tokenAddr.slice(0, 6)}…`,
               });
             }
-          })
+          }),
         );
 
         if (cancelled) return;
@@ -214,8 +209,20 @@ export function useCustomerSubscriptions(): {
         // sub:  [startTime, nextChargeTime, cyclesCharged, cyclesAuthorized, active]
         const result: SubscriptionEntry[] = active.map(
           ({ planId, sub, plan }) => {
-            const [merchant, token, amountPerCycle, cycleLengthSeconds, maxCycles] =
-              plan as unknown as [Address, Address, bigint, bigint, number, boolean];
+            const [
+              merchant,
+              token,
+              amountPerCycle,
+              cycleLengthSeconds,
+              maxCycles,
+            ] = plan as unknown as [
+              Address,
+              Address,
+              bigint,
+              bigint,
+              number,
+              boolean,
+            ];
             const [startTime, nextChargeTime, cyclesCharged, cyclesAuthorized] =
               sub as unknown as [bigint, bigint, number, number, boolean];
 
@@ -229,8 +236,8 @@ export function useCustomerSubscriptions(): {
             const subscriptionId = keccak256(
               encodeAbiParameters(
                 [{ type: "uint256" }, { type: "address" }],
-                [planId, account]
-              )
+                [planId, account],
+              ),
             );
 
             return {
@@ -248,7 +255,7 @@ export function useCustomerSubscriptions(): {
               nextChargeTime,
               startTime,
             };
-          }
+          },
         );
 
         setSubscriptions(result);
@@ -257,7 +264,7 @@ export function useCustomerSubscriptions(): {
           setError(
             err instanceof Error
               ? err.message
-              : "Failed to load subscriptions."
+              : "Failed to load subscriptions.",
           );
         }
       } finally {
