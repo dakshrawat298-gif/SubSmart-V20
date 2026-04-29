@@ -193,17 +193,27 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
               type="button"
               onClick={sign}
               disabled={state.status !== "permit-ready"}
-              className="group relative inline-flex min-h-[52px] w-full items-center justify-center overflow-hidden rounded-2xl px-5 text-sm font-medium text-white shadow-[0_10px_40px_-10px_rgba(99,102,241,0.6)] transition hover:shadow-[0_14px_50px_-10px_rgba(168,85,247,0.7)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+              className="group relative inline-flex min-h-[60px] w-full items-center justify-center overflow-hidden rounded-2xl px-5 text-base font-semibold tracking-wide text-white shadow-[0_14px_44px_-12px_rgba(99,102,241,0.75)] transition hover:shadow-[0_18px_52px_-10px_rgba(232,121,249,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-lg"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
               <span className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-violet-400 to-fuchsia-400 opacity-0 transition group-hover:opacity-100" />
-              <span className="relative flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+              />
+              <span className="relative flex items-center gap-2.5">
                 <LockIcon />
                 {state.status === "permit-ready"
-                  ? "Authorize & Subscribe"
+                  ? "Subscribe Now"
                   : "Preparing…"}
               </span>
             </button>
+          )}
+
+          {state.status === "permit-ready" && (
+            <p className="mt-3 text-center text-[11px] text-white/45 sm:text-xs">
+              You'll sign one gas-free EIP-712 permit · No infinite approvals · Cancel any time
+            </p>
           )}
         </>
       )}

@@ -12,6 +12,7 @@ import {
   type Address,
   type Hash,
   decodeErrorResult,
+  parseEventLogs,
 } from "viem";
 import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
 
@@ -41,6 +42,13 @@ export type CreatePlanState =
       readonly status: "success";
       readonly hash: Hash;
       readonly blockNumber: bigint;
+      /**
+       * The on-chain plan id assigned by `BillingHub`, decoded from the
+       * `PlanCreated` event in the transaction receipt. `undefined` only if
+       * the event was somehow missing from the receipt (defensive guard —
+       * should never happen for a successful `createPlan` tx).
+       */
+      readonly planId: bigint | undefined;
     }
   | { readonly status: "error"; readonly message: string };
 
@@ -184,10 +192,32 @@ export function useCreatePlan(): UseCreatePlanReturn {
           });
           return;
         }
+
+        // Decode the `PlanCreated` event from the receipt so the UI can
+        // surface the new planId (used for the share/checkout link). Logs
+        // already exist in the receipt — no extra RPC call required.
+        let planId: bigint | undefined;
+        try {
+          const events = parseEventLogs({
+            abi: billingHubAbi,
+            eventName: "PlanCreated",
+            logs: receipt.logs,
+          });
+          const first = events[0];
+          if (first && "args" in first) {
+            const args = first.args as { planId?: bigint };
+            planId = args.planId;
+          }
+        } catch {
+          // Best-effort decode — keep planId undefined if anything is off.
+          planId = undefined;
+        }
+
         setState({
           status: "success",
           hash,
           blockNumber: receipt.blockNumber,
+          planId,
         });
       } catch (error) {
         setState({ status: "error", message: explainError(error) });

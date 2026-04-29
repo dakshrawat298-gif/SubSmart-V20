@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { NetworkGate } from "@/components/web3/NetworkGate";
+import { GlobalNav } from "@/components/GlobalNav";
 
 export const metadata: Metadata = {
   title: "SubSmart V2.0",
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <Providers>
+          <GlobalNav />
           {children}
           <NetworkGate />
         </Providers>

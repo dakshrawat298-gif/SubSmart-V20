@@ -1,4 +1,3 @@
-import { MerchantHeader } from "@/components/merchant/MerchantHeader";
 import { CreatePlanScreen } from "./CreatePlanScreen";
 
 /**
@@ -10,8 +9,7 @@ export default function MerchantDashboardPage(): JSX.Element {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <BackgroundDecor />
-      <MerchantHeader />
-      <main className="relative mx-auto w-full max-w-2xl px-4 pb-20 pt-6 sm:px-6 sm:pt-12">
+      <main className="relative mx-auto w-full max-w-2xl px-4 pb-20 pt-8 sm:px-6 sm:pt-12">
         <div className="mb-6 sm:mb-10">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-widest text-white/70 sm:text-xs">
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
