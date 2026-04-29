@@ -38,12 +38,15 @@ function readChecksummed(raw: string | undefined): Address | undefined {
   return getAddress(trimmed);
 }
 
+// Hardcoded BillingHub deployment addresses. Bypasses Next.js public-env-var
+// lookup so the frontend always resolves the address regardless of how the
+// runtime is started (build-time inlining gotchas, missing .env file, etc).
 const ADDRESSES: Readonly<Record<number, Address | undefined>> = {
   [polygon.id]: readChecksummed(
     process.env.NEXT_PUBLIC_BILLING_HUB_ADDRESS_POLYGON
   ),
-  [polygonAmoy.id]: readChecksummed(
-    process.env.NEXT_PUBLIC_BILLING_HUB_ADDRESS_AMOY
+  [polygonAmoy.id]: getAddress(
+    "0x3fD16b4953131c77E3B6A4cc47a2Df46be71BBf4"
   ),
 };
 
