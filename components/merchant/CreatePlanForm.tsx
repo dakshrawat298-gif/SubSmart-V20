@@ -8,6 +8,7 @@ import { getBillingHubAddress } from "@/lib/chain/billingHub";
 import { CYCLE_PRESETS } from "@/lib/utils/format";
 import { useCreatePlan } from "@/hooks/useCreatePlan";
 import { CreatePlanStatus } from "./CreatePlanStatus";
+import { CreatePlanDiagnostics } from "./CreatePlanDiagnostics";
 
 type FormState = {
   readonly tokenAddress: Address | "";
@@ -263,6 +264,15 @@ export function CreatePlanForm(): JSX.Element {
       </button>
 
       <CreatePlanStatus state={state} onReset={reset} />
+
+      <CreatePlanDiagnostics
+        chainId={chainId}
+        billingHubAddress={billingHubAddress}
+        selectedToken={selectedToken}
+        parsedAmount={parsedAmount}
+        cycleSeconds={form.cycleSeconds}
+        parsedMaxCycles={parsedMaxCycles}
+      />
     </form>
   );
 }

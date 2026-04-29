@@ -10,6 +10,7 @@ import {
 import {
   BaseError,
   isAddress,
+  encodeFunctionData,
   type Address,
   type Hash,
   decodeErrorResult,
@@ -182,6 +183,47 @@ export function useCreatePlan(): UseCreatePlanReturn {
         return;
       }
 
+      // ── Pre-simulate calldata defense: explicitly encode what the tx
+      // calldata WILL be, against the BillingHub ABI. If the ABI is missing
+      // `createPlan` or the args don't match the function signature, this
+      // throws synchronously — preventing any subsequent broadcast of empty
+      // or wrong-selector calldata. This is the correct way to defend
+      // against `0x` empty-calldata; checking `request.data` post-simulate
+      // doesn't work because viem encodes calldata inside `writeContract`,
+      // not inside `simulateContract` — `request` carries abi+functionName
+      // +args and the encoding happens later.
+      let encodedCalldata: `0x${string}`;
+      try {
+        encodedCalldata = encodeFunctionData({
+          abi: billingHubAbi,
+          functionName: "createPlan",
+          args: [
+            input.token,
+            input.amountPerCycle,
+            input.cycleLengthSeconds,
+            input.maxCycles,
+          ],
+        });
+      } catch (error) {
+        setState({
+          status: "error",
+          message: `Failed to encode createPlan calldata: ${explainError(error)}`,
+        });
+        return;
+      }
+      if (
+        !encodedCalldata ||
+        encodedCalldata === "0x" ||
+        encodedCalldata.length < 10
+      ) {
+        setState({
+          status: "error",
+          message:
+            "Aborted: encoded calldata is empty. ABI may be out of sync with the contract.",
+        });
+        return;
+      }
+
       setState({ status: "simulating" });
 
       let request;
@@ -208,19 +250,9 @@ export function useCreatePlan(): UseCreatePlanReturn {
         return;
       }
 
-      // Defensive sanity-check on the simulated request before we hand it to
-      // the wallet. If `simulateContract` somehow returned a request without
-      // encoded calldata, refuse to broadcast — this is the exact condition
-      // that causes a `0x` empty-calldata transaction to land on-chain.
-      const requestData = (request as { data?: `0x${string}` }).data;
-      if (!requestData || requestData === "0x" || requestData.length < 10) {
-        setState({
-          status: "error",
-          message:
-            "Aborted: simulator returned empty calldata. No transaction was sent.",
-        });
-        return;
-      }
+      // Post-simulate sanity check on the resolved target address. Wagmi's
+      // `request` carries `address` (an input field), so this check IS
+      // reliable — unlike `data`, which is encoded inside `writeContract`.
       const requestAddress = (request as { address?: Address }).address;
       if (
         !requestAddress ||
