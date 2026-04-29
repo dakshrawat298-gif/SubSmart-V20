@@ -99,14 +99,18 @@ export function useCustomerSubscriptions(): {
 
       try {
         // ── 1. Fetch Subscribed events for this subscriber ─────────────────
-        // fromBlock pinned to the BillingHub deploy block on Amoy. Public
-        // Amoy RPCs cap eth_getLogs ranges at 10 000 blocks, so scanning
-        // from genesis (0n) returns "Block range exceeds configured limit".
+        // Dynamic window: scan only the most recent 1 000 blocks so we
+        // never trip Amoy's eth_getLogs range cap, regardless of when the
+        // BillingHub was deployed or how stale the cached client is.
+        const currentBlock = await publicClient.getBlockNumber();
+        const safeFromBlock =
+          currentBlock > 1000n ? currentBlock - 1000n : 0n;
+
         const logs = await publicClient.getLogs({
           address: hubAddress,
           event: SUBSCRIBED_EVENT,
           args: { subscriber: account },
-          fromBlock: 37488000n,
+          fromBlock: safeFromBlock,
           toBlock: "latest",
         });
 
