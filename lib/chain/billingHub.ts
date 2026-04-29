@@ -46,7 +46,7 @@ const ADDRESSES: Readonly<Record<number, Address | undefined>> = {
     process.env.NEXT_PUBLIC_BILLING_HUB_ADDRESS_POLYGON
   ),
   [polygonAmoy.id]: getAddress(
-    "0x3fD16b4953131c77E3B6A4cc47a2Df46be71BBf4"
+    "0xBB05A8B21aca3648d8d1E7e72C22001f2A9a505a"
   ),
 };
 
