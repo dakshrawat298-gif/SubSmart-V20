@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useChainId } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { parseUnits, type Address } from "viem";
 import { getTokensForChain, type TokenInfo } from "@/lib/chain/contracts";
+import { getBillingHubAddress } from "@/lib/chain/billingHub";
 import { CYCLE_PRESETS } from "@/lib/utils/format";
 import { useCreatePlan } from "@/hooks/useCreatePlan";
 import { CreatePlanStatus } from "./CreatePlanStatus";
@@ -39,6 +40,7 @@ const INITIAL: FormState = {
  */
 export function CreatePlanForm(): JSX.Element {
   const chainId = useChainId();
+  const { isConnected } = useAccount();
   const tokens = useMemo(() => getTokensForChain(chainId), [chainId]);
   const { state, submit, reset } = useCreatePlan();
   const [form, setForm] = useState<FormState>(INITIAL);
@@ -54,40 +56,81 @@ export function CreatePlanForm(): JSX.Element {
     [tokens, form.tokenAddress]
   );
 
+  // Hard guard: the submit button is only enabled once every input is fully
+  // populated and the chain is known to have a deployed BillingHub. This
+  // makes it physically impossible to fire `submit()` with partial state
+  // — the click is the entry point for any `0x` empty-calldata risk.
+  const billingHubAddress = useMemo(
+    () => getBillingHubAddress(chainId),
+    [chainId]
+  );
+  const parsedAmount = useMemo<bigint | undefined>(() => {
+    if (!selectedToken) return undefined;
+    const trimmed = form.amount.trim();
+    if (!trimmed) return undefined;
+    try {
+      const wei = parseUnits(trimmed, selectedToken.decimals);
+      return wei > 0n ? wei : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [form.amount, selectedToken]);
+  const parsedMaxCycles = useMemo<number | undefined>(() => {
+    const n = Number(form.maxCycles);
+    if (!Number.isInteger(n) || n < 1 || n > 4_294_967_295) return undefined;
+    return n;
+  }, [form.maxCycles]);
+  const isFormReady =
+    isConnected &&
+    !!billingHubAddress &&
+    !!selectedToken &&
+    parsedAmount !== undefined &&
+    form.cycleSeconds > 0n &&
+    parsedMaxCycles !== undefined;
+  const canSubmit = isFormReady && !isBusy;
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     setValidationError(undefined);
 
+    // Hard guard mirror — even if the disabled button is bypassed (e.g. via
+    // devtools or a stray Enter keypress), refuse to call submit() unless
+    // every value is present and parsed. This is the second layer; the hook
+    // itself is the third (and never sends empty calldata).
+    if (!isConnected) {
+      setValidationError("Connect your wallet first.");
+      return;
+    }
+    if (!billingHubAddress) {
+      setValidationError(
+        "BillingHub is not deployed on the active chain — switch to Polygon Amoy."
+      );
+      return;
+    }
     if (!selectedToken) {
       setValidationError("Pick a payment token from the list.");
       return;
     }
-    let amountWei: bigint;
-    try {
-      amountWei = parseUnits(form.amount.trim() || "0", selectedToken.decimals);
-    } catch {
-      setValidationError("Amount per cycle must be a valid number.");
+    if (parsedAmount === undefined) {
+      setValidationError("Amount per cycle must be a positive number.");
       return;
     }
-    if (amountWei <= 0n) {
-      setValidationError("Amount per cycle must be greater than zero.");
+    if (form.cycleSeconds <= 0n) {
+      setValidationError("Pick a billing cycle.");
       return;
     }
-    const maxCyclesNum = Number(form.maxCycles);
-    if (
-      !Number.isInteger(maxCyclesNum) ||
-      maxCyclesNum < 1 ||
-      maxCyclesNum > 4_294_967_295
-    ) {
-      setValidationError("Max cycles must be an integer between 1 and 4294967295.");
+    if (parsedMaxCycles === undefined) {
+      setValidationError(
+        "Max cycles must be an integer between 1 and 4294967295."
+      );
       return;
     }
 
     await submit({
       token: selectedToken.address,
-      amountPerCycle: amountWei,
+      amountPerCycle: parsedAmount,
       cycleLengthSeconds: form.cycleSeconds,
-      maxCycles: maxCyclesNum,
+      maxCycles: parsedMaxCycles,
     });
   }
 
@@ -193,7 +236,23 @@ export function CreatePlanForm(): JSX.Element {
 
       <button
         type="submit"
-        disabled={isBusy}
+        disabled={!canSubmit}
+        aria-disabled={!canSubmit}
+        title={
+          canSubmit
+            ? undefined
+            : !isConnected
+              ? "Connect your wallet to continue"
+              : !billingHubAddress
+                ? "Switch to Polygon Amoy"
+                : !selectedToken
+                  ? "Pick a payment token"
+                  : parsedAmount === undefined
+                    ? "Enter an amount per cycle"
+                    : parsedMaxCycles === undefined
+                      ? "Enter a valid max cycles"
+                      : undefined
+        }
         className="group relative mt-6 inline-flex min-h-[48px] w-full items-center justify-center overflow-hidden rounded-2xl px-5 text-sm font-medium text-white shadow-[0_10px_40px_-10px_rgba(99,102,241,0.6)] transition hover:shadow-[0_14px_50px_-10px_rgba(168,85,247,0.7)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
       >
         <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />

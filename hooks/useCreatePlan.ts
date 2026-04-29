@@ -9,6 +9,7 @@ import {
 } from "@wagmi/core";
 import {
   BaseError,
+  isAddress,
   type Address,
   type Hash,
   decodeErrorResult,
@@ -125,16 +126,59 @@ export function useCreatePlan(): UseCreatePlanReturn {
 
   const submit = useCallback<SubmitFn>(
     async (input) => {
+      // ── Hard guards: refuse to even simulate unless every input is fully
+      // populated and well-formed. This is the last line of defense against
+      // an empty-calldata `0x` tx ever leaving the dapp. Any failure here
+      // sets an explicit error state instead of silently calling write.
+      if (chainId === undefined) {
+        setState({
+          status: "error",
+          message: "No active chain detected — connect a wallet first.",
+        });
+        return;
+      }
       const billingHubAddress = getBillingHubAddress(chainId);
       if (!billingHubAddress) {
         setState({
           status: "missing-deployment",
-          chainId: chainId ?? 0,
+          chainId,
         });
         return;
       }
       if (!account) {
         setState({ status: "error", message: "Wallet not connected." });
+        return;
+      }
+      if (!isAddress(input.token)) {
+        setState({
+          status: "error",
+          message: "Invalid token address — pick a token from the list.",
+        });
+        return;
+      }
+      if (input.amountPerCycle <= 0n) {
+        setState({
+          status: "error",
+          message: "Amount per cycle must be greater than zero.",
+        });
+        return;
+      }
+      if (input.cycleLengthSeconds <= 0n) {
+        setState({
+          status: "error",
+          message: "Cycle length must be greater than zero.",
+        });
+        return;
+      }
+      if (
+        !Number.isInteger(input.maxCycles) ||
+        input.maxCycles < 1 ||
+        input.maxCycles > 4_294_967_295
+      ) {
+        setState({
+          status: "error",
+          message: "Max cycles must be an integer between 1 and 4294967295.",
+        });
         return;
       }
 
@@ -161,6 +205,32 @@ export function useCreatePlan(): UseCreatePlanReturn {
         request = sim.request;
       } catch (error) {
         setState({ status: "error", message: explainError(error) });
+        return;
+      }
+
+      // Defensive sanity-check on the simulated request before we hand it to
+      // the wallet. If `simulateContract` somehow returned a request without
+      // encoded calldata, refuse to broadcast — this is the exact condition
+      // that causes a `0x` empty-calldata transaction to land on-chain.
+      const requestData = (request as { data?: `0x${string}` }).data;
+      if (!requestData || requestData === "0x" || requestData.length < 10) {
+        setState({
+          status: "error",
+          message:
+            "Aborted: simulator returned empty calldata. No transaction was sent.",
+        });
+        return;
+      }
+      const requestAddress = (request as { address?: Address }).address;
+      if (
+        !requestAddress ||
+        requestAddress.toLowerCase() !== billingHubAddress.toLowerCase()
+      ) {
+        setState({
+          status: "error",
+          message:
+            "Aborted: simulator returned a request for the wrong contract address.",
+        });
         return;
       }
 
