@@ -106,6 +106,29 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
 
   const isSuccess = state.status === "success";
 
+  // Hard guard: the Subscribe button is only enabled when EVERY precondition
+  // is met. This makes it physically impossible to fire `sign()` (and the
+  // auto-triggered subscribe tx that follows) with partial state — the click
+  // is the entry point for any `0x` empty-calldata risk on the customer side.
+  const canSubscribe =
+    isConnected &&
+    !!account &&
+    !!billingHubAddress &&
+    planId !== null &&
+    plan !== null &&
+    plan.active &&
+    isAlreadySubscribed !== true &&
+    state.status === "permit-ready" &&
+    !isBusy;
+
+  // Re-validation gate before invoking sign(). Even if the disabled button
+  // is bypassed (devtools, accidental Enter), we refuse to proceed unless
+  // every condition still holds. The hook itself is the third layer.
+  const handleSubscribeClick = (): void => {
+    if (!canSubscribe) return;
+    void sign();
+  };
+
   // ── Error cases ────────────────────────────────────────────────────────────
 
   if (planId === null) {
@@ -191,8 +214,26 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
           {!isBusy && state.status !== "error" && (
             <button
               type="button"
-              onClick={sign}
-              disabled={state.status !== "permit-ready"}
+              onClick={handleSubscribeClick}
+              disabled={!canSubscribe}
+              aria-disabled={!canSubscribe}
+              title={
+                canSubscribe
+                  ? undefined
+                  : !isConnected
+                    ? "Connect your wallet to continue"
+                    : !billingHubAddress
+                      ? "Switch to Polygon Amoy"
+                      : !plan
+                        ? "Loading plan…"
+                        : !plan.active
+                          ? "This plan is no longer active"
+                          : isAlreadySubscribed === true
+                            ? "You're already subscribed to this plan"
+                            : state.status !== "permit-ready"
+                              ? "Preparing permit…"
+                              : undefined
+              }
               className="group relative inline-flex min-h-[60px] w-full items-center justify-center overflow-hidden rounded-2xl px-5 text-base font-semibold tracking-wide text-white shadow-[0_14px_44px_-12px_rgba(99,102,241,0.75)] transition hover:shadow-[0_18px_52px_-10px_rgba(232,121,249,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-lg"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />

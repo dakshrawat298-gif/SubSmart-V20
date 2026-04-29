@@ -7,7 +7,13 @@ import {
   writeContract,
   waitForTransactionReceipt,
 } from "@wagmi/core";
-import { BaseError, type Address, type Hash, decodeErrorResult } from "viem";
+import {
+  BaseError,
+  isAddress,
+  type Address,
+  type Hash,
+  decodeErrorResult,
+} from "viem";
 import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
 import { usePermitSignature } from "@/hooks/usePermitSignature";
 import type { PermitSummary } from "@/hooks/usePermitSignature";
@@ -197,6 +203,82 @@ export function useSubscribe(
     let cancelled = false;
 
     void (async (): Promise<void> => {
+      // ── Hard guards: refuse to even simulate unless every required value is
+      // fully populated and well-formed. This is the last line of defense
+      // before a `subscribe` tx reaches the wallet — any failure here aborts
+      // with an explicit error state instead of broadcasting empty calldata.
+      if (txChainId === undefined) {
+        setTxState({
+          status: "error",
+          message: "No active chain detected — connect a wallet first.",
+        });
+        return;
+      }
+      if (!isAddress(hubAddress)) {
+        setTxState({
+          status: "error",
+          message: "BillingHub address is invalid for the active chain.",
+        });
+        return;
+      }
+      if (!isAddress(txAccount)) {
+        setTxState({
+          status: "error",
+          message: "Wallet address is invalid — reconnect your wallet.",
+        });
+        return;
+      }
+      if (planId < 0n) {
+        setTxState({
+          status: "error",
+          message: "Invalid plan ID.",
+        });
+        return;
+      }
+      if (
+        !Number.isInteger(authorization.maxCycles) ||
+        authorization.maxCycles < 1 ||
+        authorization.maxCycles > 4_294_967_295
+      ) {
+        setTxState({
+          status: "error",
+          message:
+            "Permit authorized an invalid cycle count — re-sign to retry.",
+        });
+        return;
+      }
+      // EIP-2612 permit deadline must still be in the future at broadcast time.
+      const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+      if (authorization.deadline <= nowSeconds) {
+        setTxState({
+          status: "error",
+          message: "Permit deadline has expired — re-sign to retry.",
+        });
+        return;
+      }
+      // EIP-2612 v/r/s shape checks — `v` is uint8, r/s are bytes32 (0x + 64 hex).
+      if (!Number.isInteger(v) || v < 0 || v > 255) {
+        setTxState({
+          status: "error",
+          message: "Permit signature is malformed (v) — re-sign to retry.",
+        });
+        return;
+      }
+      if (typeof r !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(r)) {
+        setTxState({
+          status: "error",
+          message: "Permit signature is malformed (r) — re-sign to retry.",
+        });
+        return;
+      }
+      if (typeof s !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(s)) {
+        setTxState({
+          status: "error",
+          message: "Permit signature is malformed (s) — re-sign to retry.",
+        });
+        return;
+      }
+
       setTxState({ status: "simulating" });
 
       let request;
@@ -227,6 +309,33 @@ export function useSubscribe(
       }
 
       if (cancelled) return;
+
+      // Defensive sanity-check on the simulated request before we hand it to
+      // the wallet. If `simulateContract` somehow returned a request without
+      // encoded calldata, refuse to broadcast — this is the exact condition
+      // that causes a `0x` empty-calldata transaction to land on-chain.
+      const requestData = (request as { data?: `0x${string}` }).data;
+      if (!requestData || requestData === "0x" || requestData.length < 10) {
+        setTxState({
+          status: "error",
+          message:
+            "Aborted: simulator returned empty calldata. No transaction was sent.",
+        });
+        return;
+      }
+      const requestAddress = (request as { address?: Address }).address;
+      if (
+        !requestAddress ||
+        requestAddress.toLowerCase() !== hubAddress.toLowerCase()
+      ) {
+        setTxState({
+          status: "error",
+          message:
+            "Aborted: simulator returned a request for the wrong contract address.",
+        });
+        return;
+      }
+
       setTxState({ status: "awaiting-tx-signature" });
 
       let hash: Hash;
