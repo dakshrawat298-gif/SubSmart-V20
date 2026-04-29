@@ -99,8 +99,9 @@ export function useCustomerSubscriptions(): {
 
       try {
         // ── 1. Fetch Subscribed events for this subscriber ─────────────────
-        // fromBlock: 0n is appropriate for Amoy testnet. For mainnet, scope
-        // this to the BillingHub deployment block for faster RPC response.
+        // fromBlock pinned to the BillingHub deploy block on Amoy. Public
+        // Amoy RPCs cap eth_getLogs ranges at 10 000 blocks, so scanning
+        // from genesis (0n) returns "Block range exceeds configured limit".
         const logs = await publicClient.getLogs({
           address: hubAddress,
           event: SUBSCRIBED_EVENT,
