@@ -17,13 +17,17 @@ import type { CreateConnectorFn } from "wagmi";
  * the connector via a dynamic import here.
  *
  * RPC selection rationale (Amoy):
- *  - polygon-amoy.drpc.org was removed — it requires an API key and returns
- *    HTTP 400 on unauthenticated requests, breaking simulateContract calls.
- *  - rpc-amoy.polygon.technology is Polygon's own official gateway; most
- *    reliable for unauthenticated access and the URL used in official docs.
- *  - rpc.ankr.com/polygon_amoy is a well-maintained public multi-cloud node.
- *  - polygon-amoy.blockpi.network/v1/rpc/public is BlockPI's public tier,
- *    included as a third fallback for redundancy.
+ *  - rpc-amoy.polygon.technology removed — Polygon's official gateway enforces
+ *    strict rate limits (HTTP 429) on unauthenticated public traffic, causing
+ *    simulateContract calls to fail under normal interactive use.
+ *  - rpc.ankr.com/polygon_amoy is the primary — high-capacity multi-cloud
+ *    node, CORS-friendly, no API key required.
+ *  - polygon-amoy-bor-rpc.publicnode.com is the secondary — PublicNode's
+ *    uncapped public tier, high-availability, CORS-friendly.
+ *  - matic-amoy.api.onfinality.io/public is the tertiary fallback for
+ *    additional redundancy.
+ *  - polygon-amoy.blockpi.network/v1/rpc/public is excluded — CORS-blocked.
+ *  - polygon-amoy.drpc.org is excluded — requires an API key (HTTP 400).
  */
 
 const APP_NAME = "SubSmart V2.0";
@@ -76,11 +80,14 @@ export const wagmiConfig = createConfig({
       http("https://polygon-bor-rpc.publicnode.com", RPC_OPTIONS),
     ]),
     [polygonAmoy.id]: fallback([
-      // Primary: Polygon Technology's official Amoy gateway (no API key needed,
-      // used in Polygon's own developer docs and .env.example files).
-      http("https://rpc-amoy.polygon.technology", RPC_OPTIONS),
-      // Secondary: Ankr public multi-cloud node — CORS-friendly.
+      // Primary: Ankr public multi-cloud node — high-capacity, CORS-friendly,
+      // no API key required. Replaces rpc-amoy.polygon.technology which
+      // throttles unauthenticated traffic with HTTP 429.
       http("https://rpc.ankr.com/polygon_amoy", RPC_OPTIONS),
+      // Secondary: PublicNode uncapped public tier — CORS-friendly.
+      http("https://polygon-amoy-bor-rpc.publicnode.com", RPC_OPTIONS),
+      // Tertiary: OnFinality public endpoint for additional redundancy.
+      http("https://matic-amoy.api.onfinality.io/public", RPC_OPTIONS),
     ]),
   },
 });
