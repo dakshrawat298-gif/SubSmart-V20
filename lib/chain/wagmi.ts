@@ -68,10 +68,8 @@ export const wagmiConfig = createConfig({
       // Primary: Polygon Technology's official Amoy gateway (no API key needed,
       // used in Polygon's own developer docs and .env.example files).
       http("https://rpc-amoy.polygon.technology", RPC_OPTIONS),
-      // Secondary: Ankr public multi-cloud node.
+      // Secondary: Ankr public multi-cloud node — CORS-friendly.
       http("https://rpc.ankr.com/polygon_amoy", RPC_OPTIONS),
-      // Tertiary: BlockPI public tier for redundancy.
-      http("https://polygon-amoy.blockpi.network/v1/rpc/public", RPC_OPTIONS),
     ]),
   },
 });
