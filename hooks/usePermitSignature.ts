@@ -8,10 +8,7 @@ import {
   useWalletClient,
 } from "wagmi";
 import { getAddress, type Address, type Hex } from "viem";
-import {
-  erc20PermitAbi,
-  getTokenByAddress,
-} from "@/lib/chain/contracts";
+import { erc20PermitAbi, getTokenByAddress } from "@/lib/chain/contracts";
 import {
   buildPermitTypedData,
   computeBoundedAuthorization,
@@ -25,8 +22,8 @@ import {
  * Inputs for the permit signature hook. Pass `null` to keep the hook idle.
  *
  * All amounts are bounded per AI guidelines §4.1:
- *   total = amountPerCycle * maxCycles
- *   deadline = end-of-cycles + grace buffer.
+ * total = amountPerCycle * maxCycles
+ * deadline = end-of-cycles + grace buffer.
  * Any inputs outside the {@link computeBoundedAuthorization} safe ranges
  * are surfaced as a typed `input_validation` error.
  */
@@ -105,16 +102,16 @@ export type PermitState =
  * signature from the connected wallet.
  *
  * Security contract — must be honored by callers:
- *  - The hook surfaces `summary` BEFORE signing. The UI MUST render that
- *    summary so the user sees token, spender, amount, deadline, and the
- *    derived periodic schedule (§4.2).
- *  - `sign()` MUST be invoked from a user gesture (button click / tap).
- *    Never on mount, never on a timer (§4.2).
- *  - The hook hard-blocks any token that fails the runtime
- *    `DOMAIN_SEPARATOR()` / `nonces(owner)` probe (§4.5), and any token
- *    not on the static allow-list.
- *  - Authorized `value` is `amountPerCycle * maxCycles`. There is no path
- *    in this hook that produces `MaxUint256` or any unbounded value (§4.1).
+ * - The hook surfaces `summary` BEFORE signing. The UI MUST render that
+ * summary so the user sees token, spender, amount, deadline, and the
+ * derived periodic schedule (§4.2).
+ * - `sign()` MUST be invoked from a user gesture (button click / tap).
+ * Never on mount, never on a timer (§4.2).
+ * - The hook hard-blocks any token that fails the runtime
+ * `DOMAIN_SEPARATOR()` / `nonces(owner)` probe (§4.5), and any token
+ * not on the static allow-list.
+ * - Authorized `value` is `amountPerCycle * maxCycles`. There is no path
+ * in this hook that produces `MaxUint256` or any unbounded value (§4.1).
  */
 export function usePermitSignature(input: UsePermitSignatureInput | null): {
   readonly state: PermitState;
@@ -294,7 +291,6 @@ export function usePermitSignature(input: UsePermitSignatureInput | null): {
     owner,
     chainId,
     publicClient,
-    input,
   ]);
 
   /**
