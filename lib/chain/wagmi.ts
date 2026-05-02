@@ -37,19 +37,21 @@ const APP_URL =
 /**
  * Shared http() options.
  *
- * retryCount: 1 — one automatic retry per endpoint before wagmi's fallback()
- *   moves to the next transport. Keeping this low means a bad endpoint fails
- *   fast (≤2 attempts × timeout) rather than spending 4 × 10 s = 40 s on one
- *   dead node before moving on.
+ * retryCount: 2 — two automatic retries per endpoint. Combined with the
+ *   fallback() chain this gives the simulation plenty of runway without
+ *   hammering a single node.
  *
- * timeout: 6_000 — 6 s per attempt. Matches Polygon's ~6 s block time and
- *   ensures simulateContract / getLogs errors surface to the UI within ~12 s
- *   (2 attempts × 6 s) rather than the original 80 s worst-case.
+ * timeout: 20_000 — 20 s per attempt. Amoy public nodes can be slow to
+ *   execute eth_call simulations; 6 s was causing false "HTTP request failed"
+ *   network errors before the node had time to respond.
+ *
+ * retryDelay: 500 — brief pause between retries to avoid thundering-herd on
+ *   a node that is momentarily overloaded.
  */
 const RPC_OPTIONS = {
-  retryCount: 1,
-  retryDelay: 200,
-  timeout: 6_000,
+  retryCount: 2,
+  retryDelay: 500,
+  timeout: 20_000,
 } as const;
 
 function buildConnectors(): CreateConnectorFn[] {
@@ -66,6 +68,12 @@ export const wagmiConfig = createConfig({
   chains: [polygon, polygonAmoy],
   connectors: buildConnectors(),
   ssr: true,
+  /**
+   * Multicall batching: bundle parallel eth_call reads (balance, allowance,
+   * nonce probes) into a single Multicall3 request. Cuts RPC round-trips and
+   * reduces rate-limit exposure on the permit-preparation phase.
+   */
+  batch: { multicall: true },
   /**
    * Global polling interval (ms). Wagmi polls on-chain state (balances,
    * block number, etc.) at this cadence. 6 000 ms matches Polygon's ~6 s

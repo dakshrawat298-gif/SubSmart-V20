@@ -331,8 +331,10 @@ export function useSubscribe(
 
       let request;
       try {
-        // §4.3: simulate first against the explicitly-pinned chainId. Reverts
-        // surface as decoded error names rather than raw hex strings.
+        // §4.3: simulate first against the explicitly-pinned Amoy chainId.
+        // Hardcoding polygonAmoy.id (80002) ensures this call never
+        // accidentally routes to a mainnet transport regardless of what
+        // useChainId() returns at render time.
         const sim = await simulateContract(config, {
           abi: billingHubAbi,
           address: hubAddress,
@@ -346,10 +348,14 @@ export function useSubscribe(
             s,
           ],
           account: txAccount,
-          chainId: txChainId,
+          chainId: 80002,
         });
         request = sim.request;
       } catch (err) {
+        // Log the raw viem error object so transport-layer failures
+        // (timeouts, CORS, HTTP status codes) are visible in the console
+        // exactly as viem throws them — before any string formatting.
+        console.error("🔴 RAW_VIEM_ERROR:", err);
         // CRITICAL: do NOT guard with `if (!cancelled)` here. In React
         // StrictMode, the cleanup sets cancelled=true before this catch
         // runs, silently eating the error and leaving the spinner stuck
