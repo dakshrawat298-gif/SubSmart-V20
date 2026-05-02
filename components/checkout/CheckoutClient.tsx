@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useAccount, useChainId, useReadContract } from "wagmi";
 import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
+import { erc20PermitAbi } from "@/lib/chain/contracts";
 import { useSubscribe, type PlanData } from "@/hooks/useSubscribe";
 import { ConnectButton } from "@/components/web3/ConnectButton";
 import { PlanSummaryCard } from "@/components/checkout/PlanSummaryCard";
@@ -90,6 +91,29 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
     return { merchant, token, amountPerCycle, cycleLengthSeconds, maxCycles, active };
   }, [planRaw]);
 
+  // Pre-flight balance check — read the wallet's token balance before the
+  // permit flow begins. Uses wagmi's declarative useReadContract (TanStack
+  // Query under the hood) so there is no useEffect dependency array to
+  // mismanage and zero risk of re-render loops. The query is enabled only
+  // when the wallet is connected and the plan is fully loaded.
+  const { data: tokenBalance } = useReadContract({
+    abi: erc20PermitAbi,
+    address: plan?.token,
+    functionName: "balanceOf",
+    args: account ? [account] : undefined,
+    query: {
+      enabled: isConnected && !!account && plan !== null,
+    },
+  });
+
+  // True only once the balance response has arrived AND the wallet is short.
+  // While tokenBalance is undefined (still loading) we do not block — the
+  // simulation itself would catch it anyway.
+  const hasInsufficientBalance =
+    tokenBalance !== undefined &&
+    plan !== null &&
+    tokenBalance < plan.amountPerCycle;
+
   const subscribeInput =
     planId !== null && plan !== null && plan.active
       ? { planId, plan }
@@ -107,9 +131,8 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
   const isSuccess = state.status === "success";
 
   // Hard guard: the Subscribe button is only enabled when EVERY precondition
-  // is met. This makes it physically impossible to fire `sign()` (and the
-  // auto-triggered subscribe tx that follows) with partial state — the click
-  // is the entry point for any `0x` empty-calldata risk on the customer side.
+  // is met — including a confirmed sufficient balance. This makes it
+  // physically impossible to fire sign() with partial state or empty funds.
   const canSubscribe =
     isConnected &&
     !!account &&
@@ -118,6 +141,7 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
     plan !== null &&
     plan.active &&
     isAlreadySubscribed !== true &&
+    !hasInsufficientBalance &&
     state.status === "permit-ready" &&
     !isBusy;
 
@@ -202,6 +226,14 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
         </InfoPanel>
       )}
 
+      {isConnected && hasInsufficientBalance && !isSuccess && (
+        <InfoPanel tone="error" title="Insufficient balance">
+          Your wallet does not have enough{" "}
+          {plan.token ? "USDC" : "tokens"} to cover the first billing
+          cycle. Please top up your wallet and return to subscribe.
+        </InfoPanel>
+      )}
+
       {isConnected && !isAlreadySubscribed && !isSuccess && (
         <>
           {state.status === "permit-ready" && (
@@ -230,9 +262,11 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
                           ? "This plan is no longer active"
                           : isAlreadySubscribed === true
                             ? "You're already subscribed to this plan"
-                            : state.status !== "permit-ready"
-                              ? "Preparing permit…"
-                              : undefined
+                            : hasInsufficientBalance
+                              ? "Insufficient USDC balance — top up your wallet to subscribe"
+                              : state.status !== "permit-ready"
+                                ? "Preparing permit…"
+                                : undefined
               }
               className="group relative inline-flex min-h-[60px] w-full items-center justify-center overflow-hidden rounded-2xl px-5 text-base font-semibold tracking-wide text-white shadow-[0_14px_44px_-12px_rgba(99,102,241,0.75)] transition hover:shadow-[0_18px_52px_-10px_rgba(232,121,249,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-lg"
             >
