@@ -16,18 +16,18 @@ import type { CreateConnectorFn } from "wagmi";
  * WalletConnect project id, set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID and add
  * the connector via a dynamic import here.
  *
- * RPC selection rationale (Amoy):
- *  - rpc-amoy.polygon.technology removed — Polygon's official gateway enforces
- *    strict rate limits (HTTP 429) on unauthenticated public traffic, causing
- *    simulateContract calls to fail under normal interactive use.
- *  - polygon-amoy.g.alchemy.com/v2/demo is the primary — Alchemy's demo key
- *    endpoint, permissive CORS headers, high availability.
- *  - rpc.ankr.com/polygon_amoy is the secondary — high-capacity multi-cloud
- *    node, CORS-friendly, no API key required.
- *  - polygon-amoy-bor-rpc.publicnode.com is excluded — CORS-blocked in browser.
- *  - matic-amoy.api.onfinality.io/public is excluded — CORS-blocked in browser.
- *  - polygon-amoy.blockpi.network/v1/rpc/public is excluded — CORS-blocked.
- *  - polygon-amoy.drpc.org is excluded — requires an API key (HTTP 400).
+ * RPC selection rationale (Amoy) — browser CORS-safe endpoints only:
+ *  - rpc.ankr.com/polygon_amoy — PRIMARY. High-capacity multi-cloud node,
+ *    confirmed CORS-safe, no API key required. Previous rate-limit exposure
+ *    was caused by the infinite re-render loop (now fixed), not the endpoint.
+ *  - rpc-amoy.polygon.technology — FALLBACK. Polygon's official gateway;
+ *    confirmed CORS-safe. Used only as a secondary in case Ankr is unavailable.
+ *  - polygon-amoy.g.alchemy.com/v2/demo — excluded: enforces strict CORS,
+ *    blocks browser fetch with no Access-Control-Allow-Origin header.
+ *  - polygon-amoy-bor-rpc.publicnode.com — excluded: CORS-blocked in browser.
+ *  - matic-amoy.api.onfinality.io/public — excluded: CORS-blocked in browser.
+ *  - polygon-amoy.blockpi.network/v1/rpc/public — excluded: CORS-blocked.
+ *  - polygon-amoy.drpc.org — excluded: requires an API key (HTTP 400).
  */
 
 const APP_NAME = "SubSmart V2.0";
@@ -51,7 +51,7 @@ const APP_URL =
 const RPC_OPTIONS = {
   retryCount: 2,
   retryDelay: 500,
-  timeout: 20_000,
+  timeout: 15_000,
 } as const;
 
 function buildConnectors(): CreateConnectorFn[] {
@@ -88,10 +88,10 @@ export const wagmiConfig = createConfig({
       http("https://polygon-bor-rpc.publicnode.com", RPC_OPTIONS),
     ]),
     [polygonAmoy.id]: fallback([
-      // Primary: Alchemy demo endpoint — permissive CORS, high availability.
-      http("https://polygon-amoy.g.alchemy.com/v2/demo", RPC_OPTIONS),
-      // Secondary: Ankr public multi-cloud node — CORS-friendly, no API key.
+      // Primary: Ankr — confirmed CORS-safe, high-capacity, no API key.
       http("https://rpc.ankr.com/polygon_amoy", RPC_OPTIONS),
+      // Fallback: Polygon's official gateway — confirmed CORS-safe.
+      http("https://rpc-amoy.polygon.technology", RPC_OPTIONS),
     ]),
   },
 });
