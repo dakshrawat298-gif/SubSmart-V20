@@ -20,12 +20,12 @@ import type { CreateConnectorFn } from "wagmi";
  *  - rpc-amoy.polygon.technology removed — Polygon's official gateway enforces
  *    strict rate limits (HTTP 429) on unauthenticated public traffic, causing
  *    simulateContract calls to fail under normal interactive use.
- *  - rpc.ankr.com/polygon_amoy is the primary — high-capacity multi-cloud
+ *  - polygon-amoy.g.alchemy.com/v2/demo is the primary — Alchemy's demo key
+ *    endpoint, permissive CORS headers, high availability.
+ *  - rpc.ankr.com/polygon_amoy is the secondary — high-capacity multi-cloud
  *    node, CORS-friendly, no API key required.
- *  - polygon-amoy-bor-rpc.publicnode.com is the secondary — PublicNode's
- *    uncapped public tier, high-availability, CORS-friendly.
- *  - matic-amoy.api.onfinality.io/public is the tertiary fallback for
- *    additional redundancy.
+ *  - polygon-amoy-bor-rpc.publicnode.com is excluded — CORS-blocked in browser.
+ *  - matic-amoy.api.onfinality.io/public is excluded — CORS-blocked in browser.
  *  - polygon-amoy.blockpi.network/v1/rpc/public is excluded — CORS-blocked.
  *  - polygon-amoy.drpc.org is excluded — requires an API key (HTTP 400).
  */
@@ -88,14 +88,10 @@ export const wagmiConfig = createConfig({
       http("https://polygon-bor-rpc.publicnode.com", RPC_OPTIONS),
     ]),
     [polygonAmoy.id]: fallback([
-      // Primary: Ankr public multi-cloud node — high-capacity, CORS-friendly,
-      // no API key required. Replaces rpc-amoy.polygon.technology which
-      // throttles unauthenticated traffic with HTTP 429.
+      // Primary: Alchemy demo endpoint — permissive CORS, high availability.
+      http("https://polygon-amoy.g.alchemy.com/v2/demo", RPC_OPTIONS),
+      // Secondary: Ankr public multi-cloud node — CORS-friendly, no API key.
       http("https://rpc.ankr.com/polygon_amoy", RPC_OPTIONS),
-      // Secondary: PublicNode uncapped public tier — CORS-friendly.
-      http("https://polygon-amoy-bor-rpc.publicnode.com", RPC_OPTIONS),
-      // Tertiary: OnFinality public endpoint for additional redundancy.
-      http("https://matic-amoy.api.onfinality.io/public", RPC_OPTIONS),
     ]),
   },
 });
