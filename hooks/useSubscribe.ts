@@ -420,10 +420,11 @@ export function useSubscribe(
 
     return () => {
       cancelled = true;
-      // Reset the guard so React StrictMode's second effect invocation
-      // can re-enter the async flow cleanly. Without this, StrictMode's
-      // cleanup+remount cycle would permanently block the tx from starting.
-      txStartedRef.current = false;
+      // Do NOT reset txStartedRef here. Resetting it in cleanup causes an
+      // infinite loop: any re-render that changes a dep (e.g. permitHook.state
+      // getting a new object reference after setTxState fires) would run the
+      // cleanup, clear the guard, and immediately re-enter the async flow.
+      // txStartedRef is only reset in reset() when the user explicitly retries.
     };
   }, [
     permitHook.state,
