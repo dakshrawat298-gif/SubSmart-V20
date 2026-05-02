@@ -303,12 +303,12 @@ export function useSubscribe(
           ],
         });
       } catch (err) {
-        if (!cancelled) {
-          setTxState({
-            status: "error",
-            message: `Failed to encode subscribe calldata: ${explainError(err)}`,
-          });
-        }
+        // Always surface encoding errors — never guard with `cancelled`.
+        // React 18 setState on a dismounted component is a safe no-op.
+        setTxState({
+          status: "error",
+          message: `Failed to encode subscribe calldata: ${explainError(err)}`,
+        });
         return;
       }
       if (
@@ -316,16 +316,17 @@ export function useSubscribe(
         encodedCalldata === "0x" ||
         encodedCalldata.length < 10
       ) {
-        if (!cancelled) {
-          setTxState({
-            status: "error",
-            message:
-              "Aborted: encoded calldata is empty. ABI may be out of sync with the contract.",
-          });
-        }
+        setTxState({
+          status: "error",
+          message:
+            "Aborted: encoded calldata is empty. ABI may be out of sync with the contract.",
+        });
         return;
       }
 
+      // Only skip progress updates (not errors) when cancelled, to avoid
+      // bouncing a dismounted component through unnecessary state transitions.
+      if (cancelled) return;
       setTxState({ status: "simulating" });
 
       let request;
@@ -349,9 +350,11 @@ export function useSubscribe(
         });
         request = sim.request;
       } catch (err) {
-        if (!cancelled) {
-          setTxState({ status: "error", message: explainError(err) });
-        }
+        // CRITICAL: do NOT guard with `if (!cancelled)` here. In React
+        // StrictMode, the cleanup sets cancelled=true before this catch
+        // runs, silently eating the error and leaving the spinner stuck
+        // forever. Errors must always reach the UI state machine.
+        setTxState({ status: "error", message: explainError(err) });
         return;
       }
 
@@ -380,9 +383,9 @@ export function useSubscribe(
         // §4.3: explicit chainId on every write — never trust wallet's current chain.
         hash = await writeContract(config, request);
       } catch (err) {
-        if (!cancelled) {
-          setTxState({ status: "error", message: explainError(err) });
-        }
+        // Same reasoning: always surface wallet/write errors regardless of
+        // cancelled state — the user needs to see what went wrong.
+        setTxState({ status: "error", message: explainError(err) });
         return;
       }
 
@@ -410,14 +413,17 @@ export function useSubscribe(
           blockNumber: receipt.blockNumber,
         });
       } catch (err) {
-        if (!cancelled) {
-          setTxState({ status: "error", message: explainError(err) });
-        }
+        // Always surface receipt-wait errors too.
+        setTxState({ status: "error", message: explainError(err) });
       }
     })();
 
     return () => {
       cancelled = true;
+      // Reset the guard so React StrictMode's second effect invocation
+      // can re-enter the async flow cleanly. Without this, StrictMode's
+      // cleanup+remount cycle would permanently block the tx from starting.
+      txStartedRef.current = false;
     };
   }, [
     permitHook.state,

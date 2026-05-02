@@ -30,11 +30,22 @@ const APP_NAME = "SubSmart V2.0";
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://app.subsmart.xyz";
 
-/** Shared http() options — retry up to 3 times, 10 s timeout per attempt. */
+/**
+ * Shared http() options.
+ *
+ * retryCount: 1 — one automatic retry per endpoint before wagmi's fallback()
+ *   moves to the next transport. Keeping this low means a bad endpoint fails
+ *   fast (≤2 attempts × timeout) rather than spending 4 × 10 s = 40 s on one
+ *   dead node before moving on.
+ *
+ * timeout: 6_000 — 6 s per attempt. Matches Polygon's ~6 s block time and
+ *   ensures simulateContract / getLogs errors surface to the UI within ~12 s
+ *   (2 attempts × 6 s) rather than the original 80 s worst-case.
+ */
 const RPC_OPTIONS = {
-  retryCount: 3,
-  retryDelay: 300,
-  timeout: 10_000,
+  retryCount: 1,
+  retryDelay: 200,
+  timeout: 6_000,
 } as const;
 
 function buildConnectors(): CreateConnectorFn[] {
