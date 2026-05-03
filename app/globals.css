@@ -12,4 +12,11 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   min-height: 100vh;
+  /* Silent Premium: two barely-visible radial orbs anchored to the viewport.
+     Indigo breath in the top-left, violet exhale in the bottom-right.
+     Opacity kept at ≤8% so they add depth without ever competing with content. */
+  background-image:
+    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99,  102, 241, 0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168,  85, 247, 0.06) 0%, transparent 70%);
+  background-attachment: fixed;
 }
