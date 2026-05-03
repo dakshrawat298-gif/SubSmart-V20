@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useChainId } from "wagmi";
 import { getChainById } from "@/lib/chain/networks";
 import { useCancel } from "@/hooks/useCancel";
@@ -14,6 +15,8 @@ import {
 } from "@/lib/utils/format";
 import { toast } from "@/lib/toast";
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 type Props = {
   readonly entry: SubscriptionEntry;
   /**
@@ -23,24 +26,29 @@ type Props = {
   readonly onCancelled: (subscriptionId: `0x${string}`) => void;
 };
 
+// ── SubscriptionCard ──────────────────────────────────────────────────────────
+
 /**
  * Renders one active subscription with its plan data, timing fields,
  * and a full cancel-flow state machine.
  *
+ * Cancel flow (churn-prevention gate):
+ *   1. User clicks "Cancel subscription" → confirmation modal appears.
+ *   2. Modal "Keep Plan"  → modal closes, no chain interaction.
+ *   3. Modal "Yes, Cancel" → modal closes → useCancel fires wallet prompt.
+ *
  * One `useCancel` instance is scoped to this card so multiple cards can be
  * independently in-flight without shared state.
- *
- * After a successful cancel, a 2-second delay lets the user see the success
- * banner before `onCancelled()` triggers a refetch that removes the card.
  */
 export function SubscriptionCard({ entry, onCancelled }: Props): JSX.Element {
   const chainId = useChainId();
   const chain = getChainById(chainId);
   const { state, cancel, reset } = useCancel();
 
-  // After success: fire GlobalToast immediately, then notify parent after a
-  // short pause so the user reads the inline confirmation banner. The parent
-  // performs optimistic removal — no chain refetch required for the animation.
+  // Gate: show confirmation modal before ever touching useCancel.
+  const [confirming, setConfirming] = useState(false);
+
+  // After success: fire GlobalToast, then notify parent for optimistic removal.
   useEffect(() => {
     if (state.status !== "success") return;
     toast.success("Subscription cancelled successfully.");
@@ -62,74 +70,254 @@ export function SubscriptionCard({ entry, onCancelled }: Props): JSX.Element {
     state.status === "awaiting-signature" ||
     state.status === "mining";
 
+  function handleConfirmCancel(): void {
+    setConfirming(false);
+    void cancel(entry.subscriptionId);
+  }
+
   return (
-    <article className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] backdrop-blur-sm sm:p-6">
-      {/* ── Card header ── */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-white/60">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
-            Active · Plan #{entry.planId.toString()}
+    <>
+      <article className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] backdrop-blur-sm sm:p-6">
+        {/* ── Card header ── */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-white/60">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+              Active · Plan #{entry.planId.toString()}
+            </span>
+          </div>
+          <span className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-xs text-white/60">
+            {formatTokenAmount(entry.amountPerCycle, entry.tokenDecimals)}{" "}
+            {entry.tokenSymbol}
+            <span className="text-white/40"> / </span>
+            {formatCycleLengthHuman(entry.cycleLengthSeconds)}
           </span>
         </div>
-        <span className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-xs text-white/60">
-          {formatTokenAmount(entry.amountPerCycle, entry.tokenDecimals)}{" "}
-          {entry.tokenSymbol}
-          <span className="text-white/40"> / </span>
-          {formatCycleLengthHuman(entry.cycleLengthSeconds)}
-        </span>
-      </div>
 
-      {/* ── Metadata grid ── */}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-        <DataField
-          label="Merchant"
-          value={shortenAddress(entry.merchant)}
-          mono
-        />
-        <DataField
-          label="Token"
-          value={`${entry.tokenSymbol} (${shortenAddress(entry.token)})`}
-          mono
-        />
-        <DataField
-          label="Cycle"
-          value={formatCycleLengthHuman(entry.cycleLengthSeconds)}
-        />
-        <DataField
-          label="Cycles remaining"
-          value={`${cyclesRemaining} of ${entry.cyclesAuthorized}`}
-        />
-        <DataField label="Next charge" value={nextChargeDate} />
-        <DataField
-          label="Max cycles"
-          value={entry.maxCycles.toString()}
-        />
-      </dl>
+        {/* ── Metadata grid ── */}
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+          <DataField
+            label="Merchant"
+            value={shortenAddress(entry.merchant)}
+            mono
+          />
+          <DataField
+            label="Token"
+            value={`${entry.tokenSymbol} (${shortenAddress(entry.token)})`}
+            mono
+          />
+          <DataField
+            label="Cycle"
+            value={formatCycleLengthHuman(entry.cycleLengthSeconds)}
+          />
+          <DataField
+            label="Cycles remaining"
+            value={`${cyclesRemaining} of ${entry.cyclesAuthorized}`}
+          />
+          <DataField label="Next charge" value={nextChargeDate} />
+          <DataField
+            label="Max cycles"
+            value={entry.maxCycles.toString()}
+          />
+        </dl>
 
-      {/* ── Cancel action ── */}
-      {state.status === "idle" && (
-        <button
-          type="button"
-          onClick={() => void cancel(entry.subscriptionId)}
-          className="mt-1 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-rose-300/25 bg-rose-500/[0.08] px-4 text-sm font-medium text-rose-200 transition hover:border-rose-300/45 hover:bg-rose-500/[0.15] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 sm:w-auto"
-        >
-          <XIcon />
-          Cancel subscription
-        </button>
+        {/* ── Cancel trigger (idle only — opens modal, NOT the hook) ── */}
+        {state.status === "idle" && (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="mt-1 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-rose-300/25 bg-rose-500/[0.08] px-4 text-sm font-medium text-rose-200 transition hover:border-rose-300/45 hover:bg-rose-500/[0.15] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 sm:w-auto"
+          >
+            <XIcon />
+            Cancel subscription
+          </button>
+        )}
+
+        {/* ── In-progress / result banners ── */}
+        {state.status !== "idle" && (
+          <CancelBanner
+            state={state}
+            isBusy={isBusy}
+            chain={chain}
+            onReset={reset}
+          />
+        )}
+      </article>
+
+      {/* ── Confirmation modal (portal — renders at document.body) ── */}
+      {confirming && (
+        <CancelConfirmModal
+          planId={entry.planId}
+          amountLabel={`${formatTokenAmount(entry.amountPerCycle, entry.tokenDecimals)} ${entry.tokenSymbol} / ${formatCycleLengthHuman(entry.cycleLengthSeconds)}`}
+          onConfirm={handleConfirmCancel}
+          onDismiss={() => setConfirming(false)}
+        />
       )}
-
-      {/* ── In-progress / result banners ── */}
-      {state.status !== "idle" && (
-        <CancelBanner
-          state={state}
-          isBusy={isBusy}
-          chain={chain}
-          onReset={reset}
-        />
-      )}
-    </article>
+    </>
   );
+}
+
+// ── CancelConfirmModal ────────────────────────────────────────────────────────
+
+/**
+ * Glassmorphic confirmation modal rendered into document.body via React portal.
+ *
+ * Retention-first button hierarchy:
+ *   Primary (indigo, filled) → "Keep Plan"  — the safe, encouraged action
+ *   Secondary (rose, outline) → "Yes, Cancel" — destructive, visually muted
+ *
+ * Accessibility:
+ *   - Focus is placed on "Keep Plan" on mount (default-safe action).
+ *   - Escape key dismisses.
+ *   - Backdrop click dismisses.
+ *   - role="dialog" + aria-modal + aria-labelledby.
+ */
+function CancelConfirmModal({
+  planId,
+  amountLabel,
+  onConfirm,
+  onDismiss,
+}: {
+  planId: bigint;
+  amountLabel: string;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}): JSX.Element | null {
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  // One-frame defer so the CSS transition fires from the initial hidden state.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Focus the "Keep Plan" button on mount — retention-first default.
+  useEffect(() => {
+    keepRef.current?.focus();
+  }, []);
+
+  // Escape to dismiss.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") onDismiss();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+
+  // Lock body scroll while modal is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const content = (
+    // Backdrop
+    <div
+      className={[
+        "fixed inset-0 z-[9998] flex items-center justify-center px-4",
+        "bg-black/55 backdrop-blur-sm",
+        "transition-opacity duration-300",
+        visible ? "opacity-100" : "opacity-0",
+      ].join(" ")}
+      aria-hidden="true"
+      onClick={onDismiss}
+    >
+      {/* Dialog panel — stop propagation so clicking inside doesn't close */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-modal-title"
+        onClick={(e) => e.stopPropagation()}
+        className={[
+          "relative w-full max-w-sm overflow-hidden",
+          "rounded-3xl border border-white/[0.09] bg-slate-900/90 backdrop-blur-2xl",
+          "shadow-[0_32px_64px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)_inset]",
+          "transition-all duration-300",
+          visible
+            ? "translate-y-0 opacity-100 scale-100"
+            : "translate-y-4 opacity-0 scale-95",
+        ].join(" ")}
+      >
+        {/* Rose accent gradient — top edge, very subtle */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-rose-400/50 to-transparent"
+        />
+
+        <div className="p-6 sm:p-7">
+          {/* Warning icon */}
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/12 text-rose-400 ring-1 ring-inset ring-rose-400/20">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 9v4M12 17h.01" />
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+
+          {/* Title */}
+          <h2
+            id="cancel-modal-title"
+            className="mt-4 text-center text-base font-semibold leading-tight text-white"
+          >
+            Cancel Subscription?
+          </h2>
+
+          {/* Plan pill */}
+          <p className="mt-2 text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 font-mono text-[11px] text-white/50">
+              Plan #{planId.toString()} · {amountLabel}
+            </span>
+          </p>
+
+          {/* Body */}
+          <p className="mt-4 text-center text-sm leading-relaxed text-white/55">
+            This will revoke the smart contract permit and stop{" "}
+            <span className="text-white/75">all future charges</span>{" "}
+            immediately. The action cannot be undone without a new subscription.
+          </p>
+
+          {/* Actions */}
+          <div className="mt-6 flex flex-col gap-2.5 sm:flex-row-reverse">
+            {/* PRIMARY: Keep Plan — retention-first, visually dominant */}
+            <button
+              ref={keepRef}
+              type="button"
+              onClick={onDismiss}
+              className="flex-1 inline-flex min-h-[44px] items-center justify-center rounded-2xl bg-indigo-500 px-5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            >
+              Keep Plan
+            </button>
+
+            {/* SECONDARY: Yes Cancel — muted destructive */}
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="flex-1 inline-flex min-h-[44px] items-center justify-center rounded-2xl border border-rose-300/30 bg-rose-500/[0.09] px-5 text-sm font-medium text-rose-300/90 transition hover:border-rose-300/50 hover:bg-rose-500/[0.16] hover:text-rose-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+            >
+              Yes, Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Portal to body — escapes any overflow:hidden ancestor on the card list.
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }
 
 // ── CancelBanner ─────────────────────────────────────────────────────────────
@@ -224,17 +412,16 @@ function CancelBanner({
     );
   }
 
-  // isBusy guard — should not be reachable with the above branches
   return <Banner tone="info" spinner title="Processing…" />;
 }
 
-// ── Shared primitives ─────────────────────────────────────────────────────
+// ── Shared primitives ──────────────────────────────────────────────────────────
 
 const BANNER_TONE = {
-  info: "border-indigo-300/20 bg-indigo-500/[0.08] text-indigo-100",
+  info:    "border-indigo-300/20 bg-indigo-500/[0.08] text-indigo-100",
   success: "border-emerald-300/25 bg-emerald-500/[0.08] text-emerald-100",
-  warn: "border-amber-300/25 bg-amber-500/[0.08] text-amber-100",
-  error: "border-rose-300/25 bg-rose-500/[0.08] text-rose-100",
+  warn:    "border-amber-300/25 bg-amber-500/[0.08] text-amber-100",
+  error:   "border-rose-300/25 bg-rose-500/[0.08] text-rose-100",
 } as const;
 
 function Banner({
