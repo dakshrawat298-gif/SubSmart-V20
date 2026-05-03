@@ -12,11 +12,15 @@ import {
   buildExplorerTxUrl,
   shortenHash,
 } from "@/lib/utils/format";
+import { toast } from "@/lib/toast";
 
 type Props = {
   readonly entry: SubscriptionEntry;
-  /** Called after a successful cancel so the parent can refetch the list. */
-  readonly onCancelled: () => void;
+  /**
+   * Called after a successful cancel with the cancelled subscriptionId so the
+   * parent can optimistically remove the card before the next chain refetch.
+   */
+  readonly onCancelled: (subscriptionId: `0x${string}`) => void;
 };
 
 /**
@@ -34,13 +38,15 @@ export function SubscriptionCard({ entry, onCancelled }: Props): JSX.Element {
   const chain = getChainById(chainId);
   const { state, cancel, reset } = useCancel();
 
-  // After success: short pause so the user reads the confirmation, then
-  // notify the parent to refetch (card disappears from the list).
+  // After success: fire GlobalToast immediately, then notify parent after a
+  // short pause so the user reads the inline confirmation banner. The parent
+  // performs optimistic removal — no chain refetch required for the animation.
   useEffect(() => {
     if (state.status !== "success") return;
-    const t = setTimeout(onCancelled, 2_000);
+    toast.success("Subscription cancelled successfully.");
+    const t = setTimeout(() => onCancelled(entry.subscriptionId), 1_500);
     return () => clearTimeout(t);
-  }, [state.status, onCancelled]);
+  }, [state.status, onCancelled, entry.subscriptionId]);
 
   const cyclesRemaining = entry.cyclesAuthorized - entry.cyclesCharged;
   const nextChargeDate = new Date(

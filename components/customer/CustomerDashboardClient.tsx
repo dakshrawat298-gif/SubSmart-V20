@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { getBillingHubAddress } from "@/lib/chain/billingHub";
 import { useCustomerSubscriptions } from "@/hooks/useCustomerSubscriptions";
+import type { SubscriptionEntry } from "@/hooks/useCustomerSubscriptions";
 import { SubscriptionCard } from "@/components/customer/SubscriptionCard";
 import { ConnectButton } from "@/components/web3/ConnectButton";
 
@@ -25,11 +26,34 @@ export function CustomerDashboardClient(): JSX.Element {
   const chainId = useChainId();
   const hubAddress = getBillingHubAddress(chainId);
 
-  const { subscriptions, isLoading, error, refetch } =
-    useCustomerSubscriptions();
+  const {
+    subscriptions: fetchedSubs,
+    isLoading,
+    error,
+    refetch,
+  } = useCustomerSubscriptions();
 
-  // Stable callback: passed to every SubscriptionCard as `onCancelled`.
-  const handleCancelled = useCallback(() => refetch(), [refetch]);
+  // Mirror fetched subscriptions into local state so we can perform optimistic
+  // removal the moment a cancel succeeds — no waiting for the next refetch.
+  const [subscriptions, setSubscriptions] = useState<SubscriptionEntry[]>([]);
+  useEffect(() => {
+    setSubscriptions(fetchedSubs);
+  }, [fetchedSubs]);
+
+  // Optimistically remove the cancelled card from the visible list, then
+  // trigger a background refetch so the local state stays consistent with
+  // the chain once the new block propagates.
+  const handleCancelled = useCallback(
+    (subscriptionId: `0x${string}`) => {
+      setSubscriptions((prev) =>
+        prev.filter((s) => s.subscriptionId !== subscriptionId)
+      );
+      // Background sync — runs after the optimistic update so the UI never
+      // shows a stale card even if the refetch is slow.
+      setTimeout(() => refetch(), 3_000);
+    },
+    [refetch]
+  );
 
   // ── 1. Not connected ─────────────────────────────────────────────────────
   if (!isConnected) {
