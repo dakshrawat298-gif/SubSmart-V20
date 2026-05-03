@@ -21,10 +21,11 @@ function fmtRevenue(raw: string): string {
 /**
  * Merchant analytics panel — reads on-chain `Charged` events for the connected
  * wallet and displays aggregate revenue, charge count, and a block-bucketed
- * sparkline activity chart.
+ * sparkline.
  *
- * Purely client-side. Dynamically imported with ssr:false in CreatePlanForm
- * so no wagmi hook or window reference ever executes server-side.
+ * Placement: rendered ABOVE the CreatePlanForm in CreatePlanScreen.
+ * All errors are routed to GlobalToast — this component never displays raw
+ * error strings in the DOM.
  */
 export function MerchantAnalytics({
   createdPlans,
@@ -33,23 +34,29 @@ export function MerchantAnalytics({
 }): JSX.Element | null {
   const { isConnected } = useAccount();
 
-  // Build planId→name map once; passed to hook for log enrichment.
   const planNames = useMemo(
     () => new Map(createdPlans.map((p) => [p.planId.toString(), p.planName])),
-    // Stringify planIds so the map reference changes only when content changes
+    // Recompute only when the set of plan IDs changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [createdPlans.map((p) => p.planId.toString()).join(",")]
   );
 
-  const { totalRevenue, totalCharges, perPlan, sparkline, scannedBlocks, isLoading, error, refetch } =
-    useMerchantAnalytics(planNames);
+  const {
+    totalRevenue,
+    totalCharges,
+    perPlan,
+    sparkline,
+    scannedBlocks,
+    isLoading,
+    refetch,
+  } = useMerchantAnalytics(planNames);
 
-  // Don't render until wallet is connected — the form already shows a connect
-  // gate, so showing an empty analytics section would be visual noise.
+  // Hide entirely when wallet not connected — CreatePlanScreen shows the
+  // "connect wallet" gate in that state.
   if (!isConnected) return null;
 
   return (
-    <section aria-label="Revenue analytics" className="mt-8">
+    <section aria-label="Revenue analytics" className="mb-8">
       {/* ── Section header ──────────────────────────────────────────────── */}
       <div className="mb-4 flex items-center gap-3">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-white/50">
@@ -71,16 +78,6 @@ export function MerchantAnalytics({
           {isLoading ? "Loading…" : "Refresh"}
         </button>
       </div>
-
-      {/* ── Error state ─────────────────────────────────────────────────── */}
-      {error && (
-        <div
-          role="alert"
-          className="mb-4 rounded-xl border border-rose-300/20 bg-rose-500/[0.07] px-4 py-3 text-xs text-rose-100/80"
-        >
-          {error}
-        </div>
-      )}
 
       {/* ── Stat cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
@@ -158,8 +155,8 @@ export function MerchantAnalytics({
         </div>
       )}
 
-      {/* Empty state — wallet connected but no charges in scanned window */}
-      {!isLoading && !error && totalCharges === 0 && (
+      {/* Empty state */}
+      {!isLoading && totalCharges === 0 && scannedBlocks > 0 && (
         <p className="mt-3 text-center text-[11px] text-white/20">
           No charges found in the last ~{scannedBlocks.toLocaleString()} blocks
         </p>
@@ -172,8 +169,8 @@ export function MerchantAnalytics({
 
 const ACCENT_COLORS = {
   emerald: "text-emerald-300",
-  indigo:  "text-indigo-300",
-  none:    "text-white/80",
+  indigo: "text-indigo-300",
+  none: "text-white/80",
 } as const;
 
 function StatCard({
@@ -208,10 +205,6 @@ function StatCard({
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 
-/**
- * Pure SVG sparkline — 24 vertical bars, no external library.
- * Bar fill shifts from white/10 → indigo/60 as height increases.
- */
 function Sparkline({
   values,
   isLoading,
@@ -219,15 +212,10 @@ function Sparkline({
   values: readonly number[];
   isLoading: boolean;
 }): JSX.Element {
-  const H = 48;       // chart height px
-  const GAP = 3;      // gap between bars px
-  const RADIUS = 2;   // bar corner radius
-
-  const barW = useMemo(() => {
-    // Recalculate bar width based on number of values + gaps
-    // We render in a 100%-wide SVG with viewBox, so width is relative
-    return 100 / values.length - GAP;
-  }, [values.length]);
+  const H = 48;
+  const GAP = 3;
+  const RADIUS = 2;
+  const barW = 100 / values.length - GAP;
 
   if (isLoading) {
     return (
@@ -236,7 +224,7 @@ function Sparkline({
           <div
             key={i}
             className="flex-1 animate-pulse rounded-sm bg-white/[0.05]"
-            style={{ height: `${20 + Math.random() * 60}%` }}
+            style={{ height: `${25 + ((i * 17) % 55)}%` }}
           />
         ))}
       </div>
@@ -257,10 +245,8 @@ function Sparkline({
         const barH = Math.max(v * H, hasActivity ? 2 : H * 0.08);
         const x = i * (barW + GAP);
         const y = H - barH;
-
-        // Shift fill: low = white/8, high = indigo-400/50
-        const opacity = hasActivity ? 0.08 + v * 0.55 : 0.06;
         const isHot = v > 0.6;
+        const opacity = hasActivity ? 0.08 + v * 0.55 : 0.06;
 
         return (
           <rect
@@ -271,14 +257,19 @@ function Sparkline({
             height={barH}
             rx={RADIUS}
             ry={RADIUS}
-            fill={isHot ? "rgba(129,140,248,0.65)" : `rgba(255,255,255,${opacity.toFixed(2)})`}
+            fill={
+              isHot
+                ? "rgba(129,140,248,0.65)"
+                : `rgba(255,255,255,${opacity.toFixed(2)})`
+            }
           />
         );
       })}
-
-      {/* Baseline */}
       <line
-        x1="0" y1={H} x2="100" y2={H}
+        x1="0"
+        y1={H}
+        x2="100"
+        y2={H}
         stroke="rgba(255,255,255,0.05)"
         strokeWidth="0.5"
       />
@@ -314,8 +305,20 @@ function SpinnerMini(): JSX.Element {
       fill="none"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
-      <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeOpacity="0.25"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 00-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

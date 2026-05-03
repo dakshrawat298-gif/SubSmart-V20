@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { NetworkGate } from "@/components/web3/NetworkGate";
 import { GlobalNav } from "@/components/GlobalNav";
 import { WalletConnectedToast } from "@/components/web3/WalletConnectedToast";
+import { GlobalToast } from "@/components/ui/GlobalToast";
 
 export const metadata: Metadata = {
   title: "SubSmart V2.0",
@@ -30,6 +31,7 @@ export default function RootLayout({
           {children}
           <NetworkGate />
           <WalletConnectedToast />
+          <GlobalToast />
         </Providers>
       </body>
     </html>

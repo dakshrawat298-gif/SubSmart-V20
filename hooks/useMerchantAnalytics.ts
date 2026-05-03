@@ -5,6 +5,7 @@ import { useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseAbiItem, formatUnits } from "viem";
 import type { Address } from "viem";
 import { getBillingHubAddress } from "@/lib/chain/billingHub";
+import { toast } from "@/lib/toast";
 
 // ── Event ABI fragment ────────────────────────────────────────────────────────
 
@@ -14,21 +15,18 @@ const CHARGED_EVENT = parseAbiItem(
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** USDC has 6 decimals on Polygon Amoy — used for all revenue formatting. */
 const USDC_DECIMALS = 6;
-
-/**
- * Number of buckets in the sparkline. Divides the scanned block window into
- * equal segments so the chart always fills the full width regardless of range.
- */
 const SPARKLINE_BUCKETS = 24;
 
 /**
- * How many blocks to scan from tip. Amoy avg block time ≈ 2s → 1 000 blocks
- * ≈ last 33 minutes. Matches the cap used by `useCustomerSubscriptions` so we
- * never trip the node's eth_getLogs range limit.
+ * 500 blocks ≈ 16 min on Polygon Amoy (2 s avg).
+ *
+ * Public Amoy RPC nodes cap eth_getLogs at ~3 500 blocks per request.
+ * Using 500 gives a 7× safety margin so we never trip the range limit.
+ * If the call still fails (e.g. degraded node), the catch routes the error
+ * to the global toast — the panel simply stays at $0.00 with no inline crash.
  */
-const SCAN_BLOCKS = 1000n;
+const SCAN_BLOCKS = 500n;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -36,7 +34,6 @@ export type PerPlanStat = {
   readonly planId: bigint;
   readonly planName: string;
   readonly chargeCount: number;
-  /** Human-readable revenue string e.g. "120.00" */
   readonly revenue: string;
 };
 
@@ -44,29 +41,23 @@ export type MerchantAnalyticsResult = {
   readonly totalRevenue: string;
   readonly totalCharges: number;
   readonly perPlan: PerPlanStat[];
-  /** 24 values in [0, 1] — normalized charge count per block bucket. */
+  /** 24 values in [0, 1] — normalised charge count per block bucket. */
   readonly sparkline: readonly number[];
-  /** Approximate number of blocks scanned (for the "Last N blocks" label). */
+  /** Approximate number of blocks that were scanned. */
   readonly scannedBlocks: number;
   readonly isLoading: boolean;
-  readonly error: string | null;
   readonly refetch: () => void;
 };
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
- * Fetches all `Charged` events where `merchant === account` from BillingHub,
- * then computes aggregate revenue, per-plan breakdowns, and a sparkline.
+ * Fetches `Charged` events where `merchant === account` from BillingHub,
+ * computes aggregate revenue, per-plan breakdowns, and a sparkline.
  *
- * Algorithm mirrors `useCustomerSubscriptions`:
- *   1. getBlockNumber() → derive safe fromBlock (tip - SCAN_BLOCKS).
- *   2. getLogs(Charged, args.merchant = account) → raw log array.
- *   3. Aggregate total revenue, per-plan map, and bucket counts for sparkline.
- *   4. Normalise sparkline values to [0, 1].
- *
- * `planNames` is a map from planId string to human-readable name (supplied by
- * the caller from localStorage) — enriches per-plan rows without an extra RPC.
+ * Error strategy: ALL failures are routed to the global toast notification
+ * system (lib/toast.ts). The hook never surfaces an error string into the
+ * component tree — on failure the panel gracefully displays $0.00.
  */
 export function useMerchantAnalytics(
   planNames: ReadonlyMap<string, string>
@@ -87,7 +78,6 @@ export function useMerchantAnalytics(
     useState<readonly number[]>(EMPTY_SPARKLINE);
   const [scannedBlocks, setScannedBlocks] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [fetchTick, setFetchTick] = useState(0);
 
   const refetch = useCallback(() => setFetchTick((t) => t + 1), []);
@@ -100,7 +90,6 @@ export function useMerchantAnalytics(
       setSparkline(EMPTY_SPARKLINE);
       setScannedBlocks(0);
       setIsLoading(false);
-      setError(null);
       return;
     }
 
@@ -108,16 +97,15 @@ export function useMerchantAnalytics(
 
     void (async (): Promise<void> => {
       setIsLoading(true);
-      setError(null);
 
       try {
-        // ── 1. Derive safe block window ──────────────────────────────────
+        // ── 1. Derive safe block window (500 blocks, well within RPC cap) ──
         const currentBlock = await publicClient.getBlockNumber();
         const fromBlock =
           currentBlock > SCAN_BLOCKS ? currentBlock - SCAN_BLOCKS : 0n;
         const blockWindow = Number(currentBlock - fromBlock);
 
-        // ── 2. Fetch Charged events for this merchant ────────────────────
+        // ── 2. Fetch Charged events for this merchant address ────────────
         const logs = await publicClient.getLogs({
           address: hubAddress as Address,
           event: CHARGED_EVENT,
@@ -128,7 +116,7 @@ export function useMerchantAnalytics(
 
         if (cancelled) return;
 
-        // ── 3. Aggregate: totals, per-plan map, sparkline buckets ────────
+        // ── 3. Aggregate totals, per-plan map, sparkline buckets ─────────
         let totalRaw = 0n;
         const planMap = new Map<
           string,
@@ -152,7 +140,6 @@ export function useMerchantAnalytics(
             planMap.set(key, { planId, chargeCount: 1, revenueRaw: amount });
           }
 
-          // Assign to sparkline bucket by block offset from window start
           if (log.blockNumber !== null && bucketSize > 0) {
             const offset = Number(log.blockNumber - fromBlock);
             const bucket = Math.min(
@@ -163,11 +150,11 @@ export function useMerchantAnalytics(
           }
         }
 
-        // ── 4. Normalise sparkline values ────────────────────────────────
+        // ── 4. Normalise sparkline ────────────────────────────────────────
         const peak = Math.max(...bucketCounts, 1);
         const normalised = bucketCounts.map((c) => c / peak);
 
-        // ── 5. Build per-plan list (descending revenue) ──────────────────
+        // ── 5. Build per-plan list (descending revenue) ───────────────────
         const perPlanResult: PerPlanStat[] = [...planMap.values()]
           .sort((a, b) => (b.revenueRaw > a.revenueRaw ? 1 : -1))
           .map(({ planId, chargeCount, revenueRaw }) => ({
@@ -186,10 +173,10 @@ export function useMerchantAnalytics(
           setScannedBlocks(blockWindow);
         }
       } catch (err: unknown) {
+        // Never render the raw error in the DOM — route it to the global
+        // floating toast so the panel degrades gracefully to $0.00.
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load analytics."
-          );
+          toast.error(err);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -199,9 +186,6 @@ export function useMerchantAnalytics(
     return () => {
       cancelled = true;
     };
-    // planNames is a Map passed by reference — changes to its contents won't
-    // retrigger this effect. That's intentional: plan names update from
-    // localStorage only; the analytics refetch is explicit via refetch().
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, isConnected, hubAddress, publicClient, fetchTick]);
 
@@ -212,7 +196,6 @@ export function useMerchantAnalytics(
     sparkline,
     scannedBlocks,
     isLoading,
-    error,
     refetch,
   };
 }
