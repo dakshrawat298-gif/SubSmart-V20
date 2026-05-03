@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { shortenHash } from "@/lib/utils/format";
+
+// Dynamically import the QR renderer with ssr:false — react-qr-code generates
+// SVG via browser DOM APIs; excluding it from the server bundle guarantees
+// zero hydration surface even if the parent tree is ever partially server-
+// rendered.
+const QRCode = dynamic(() => import("react-qr-code"), { ssr: false });
 
 // ── Shared type ───────────────────────────────────────────────────────────────
 // Exported so CreatePlanForm can import it without a separate types file.
@@ -19,19 +26,6 @@ export type CreatedPlan = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-/**
- * Renders the merchant's local plan inventory — a running list of every plan
- * successfully published on-chain during this browser session (persisted to
- * localStorage so it survives page refreshes).
- *
- * Purely presentational. All state management lives in CreatePlanForm which
- * owns the creation flow and pushes completed plans into this list.
- *
- * Silent Premium design rules:
- *  - bg-white/[0.03] cards with border-white/[0.07] — recessed, not glowing.
- *  - No bold accent colors on data cells; restrained indigo only on actions.
- *  - Plan name is the visual anchor; metadata is secondary (text-white/50).
- */
 export function ActivePlansInventory({
   plans,
 }: {
@@ -43,9 +37,6 @@ export function ActivePlansInventory({
     if (typeof window !== "undefined") setOrigin(window.location.origin);
   }, []);
 
-  // Always render the section once there is at least one plan so the merchant
-  // can see their inventory. Return null before the first plan is created so
-  // the empty state doesn't distract during form fill.
   if (plans.length === 0) return null;
 
   return (
@@ -83,6 +74,7 @@ function PlanCard({
   origin: string;
 }): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const checkoutUrl = origin
     ? `${origin}/checkout/${plan.planId.toString()}?name=${encodeURIComponent(plan.planName)}`
@@ -112,71 +104,216 @@ function PlanCard({
   const createdLabel = formatRelativeTime(plan.createdAt);
 
   return (
-    <div className="group rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4 transition hover:border-white/[0.12] hover:bg-white/[0.05] sm:p-5">
-      <div className="flex flex-wrap items-start gap-3">
-        {/* ── Left: plan identity ──────────────────────────────────────── */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Plan ID badge */}
-            <span className="inline-flex items-center rounded-lg border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] text-white/40">
-              #{plan.planId.toString()}
-            </span>
-            {/* Created timestamp */}
-            <span className="text-[11px] text-white/25">{createdLabel}</span>
+    <>
+      <div className="group rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4 transition hover:border-white/[0.12] hover:bg-white/[0.05] sm:p-5">
+        <div className="flex flex-wrap items-start gap-3">
+          {/* ── Left: plan identity ──────────────────────────────────────── */}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-lg border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] text-white/40">
+                #{plan.planId.toString()}
+              </span>
+              <span className="text-[11px] text-white/25">{createdLabel}</span>
+            </div>
+
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {plan.planName}
+            </p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <MetaChip label="Amount" value={`${plan.amount} ${plan.symbol}`} />
+              <MetaChip label="Cycle" value={plan.cycleLabel} />
+              <MetaChip label="Max cycles" value={String(plan.maxCycles)} />
+              {plan.hash && (
+                <span className="font-mono text-[11px] text-white/25">
+                  {shortenHash(plan.hash)}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Plan name — primary visual anchor */}
-          <p className="mt-1.5 text-sm font-semibold text-white">
-            {plan.planName}
-          </p>
+          {/* ── Right: action buttons ─────────────────────────────────── */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* QR code button */}
+            <button
+              type="button"
+              onClick={() => setQrOpen(true)}
+              disabled={!checkoutUrl}
+              aria-label={`Show QR code for ${plan.planName}`}
+              className={[
+                "inline-flex items-center justify-center rounded-xl border px-2.5 py-2 text-xs font-medium transition",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
+                "disabled:cursor-not-allowed disabled:opacity-40",
+                "border-white/10 bg-white/[0.04] text-white/60 hover:border-indigo-300/30 hover:bg-indigo-500/10 hover:text-indigo-200",
+              ].join(" ")}
+            >
+              <QrIcon />
+            </button>
 
-          {/* Metadata row */}
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <MetaChip
-              label="Amount"
-              value={`${plan.amount} ${plan.symbol}`}
-            />
-            <MetaChip label="Cycle" value={plan.cycleLabel} />
-            <MetaChip label="Max cycles" value={String(plan.maxCycles)} />
-            {plan.hash && (
-              <span className="font-mono text-[11px] text-white/25">
-                {shortenHash(plan.hash)}
-              </span>
-            )}
+            {/* Copy link button */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!checkoutUrl}
+              aria-label={
+                copied
+                  ? "Checkout link copied"
+                  : `Copy checkout link for ${plan.planName}`
+              }
+              className={[
+                "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
+                "disabled:cursor-not-allowed disabled:opacity-40",
+                copied
+                  ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/10 bg-white/[0.04] text-white/60 hover:border-indigo-300/30 hover:bg-indigo-500/10 hover:text-indigo-200",
+              ].join(" ")}
+            >
+              {copied ? (
+                <>
+                  <CheckIcon />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <LinkIcon />
+                  Copy Link
+                </>
+              )}
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* ── Right: copy action ───────────────────────────────────────── */}
+      {/* QR modal — rendered outside the card so stacking context is clean */}
+      {qrOpen && (
+        <QrModal
+          plan={plan}
+          checkoutUrl={checkoutUrl}
+          onClose={() => setQrOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── QrModal ───────────────────────────────────────────────────────────────────
+
+function QrModal({
+  plan,
+  checkoutUrl,
+  onClose,
+}: {
+  plan: CreatedPlan;
+  checkoutUrl: string;
+  onClose: () => void;
+}): JSX.Element {
+  // ESC to close
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    // Prevent background scroll while modal is open
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [handleKeyDown]);
+
+  return (
+    // Backdrop — click outside to close
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`QR code for ${plan.planName}`}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Dark blur backdrop */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+      />
+
+      {/* Modal panel — stop propagation so clicking inside doesn't close */}
+      <div
+        className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/[0.10] bg-[#0d1424] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.9)] backdrop-blur-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top accent line */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/40 to-transparent"
+        />
+
+        {/* Close button */}
         <button
           type="button"
-          onClick={handleCopy}
-          disabled={!checkoutUrl}
-          aria-label={
-            copied
-              ? "Checkout link copied"
-              : `Copy checkout link for ${plan.planName}`
-          }
-          className={[
-            "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
-            "disabled:cursor-not-allowed disabled:opacity-40",
-            copied
-              ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-300"
-              : "border-white/10 bg-white/[0.04] text-white/60 hover:border-indigo-300/30 hover:bg-indigo-500/10 hover:text-indigo-200",
-          ].join(" ")}
+          onClick={onClose}
+          aria-label="Close QR modal"
+          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-lg text-white/35 transition hover:bg-white/10 hover:text-white/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
         >
-          {copied ? (
-            <>
-              <CheckIcon />
-              Copied!
-            </>
-          ) : (
-            <>
-              <LinkIcon />
-              Copy Link
-            </>
-          )}
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
         </button>
+
+        {/* Content */}
+        <div className="flex flex-col items-center px-8 pb-8 pt-7">
+          {/* Plan identity */}
+          <span className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-white/40">
+            Plan #{plan.planId.toString()}
+          </span>
+          <h3 className="mt-2 text-center text-base font-semibold leading-snug text-white">
+            {plan.planName}
+          </h3>
+          <p className="mt-1 text-center text-[11px] text-white/35">
+            {plan.amount} {plan.symbol} · {plan.cycleLabel}
+          </p>
+
+          {/* Separator */}
+          <div
+            aria-hidden="true"
+            className="my-6 h-px w-full bg-gradient-to-r from-transparent via-white/[0.08] to-transparent"
+          />
+
+          {/* QR code — white padded container for camera scannability */}
+          <div className="rounded-2xl bg-white p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+            <QRCode
+              value={checkoutUrl}
+              size={192}
+              bgColor="#ffffff"
+              fgColor="#0b1020"
+              level="M"
+            />
+          </div>
+
+          {/* Instruction line */}
+          <p className="mt-5 text-center text-[11px] leading-relaxed text-white/30">
+            Scan to open the checkout page
+          </p>
+
+          {/* URL chip — for visual confirmation, not meant for reading */}
+          <div className="mt-3 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+            <p className="truncate text-center font-mono text-[10px] text-white/25">
+              {checkoutUrl}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -196,6 +333,29 @@ function MetaChip({
       <span className="text-white/25">{label}: </span>
       <span className="text-white/55">{value}</span>
     </span>
+  );
+}
+
+function QrIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="3" height="3" rx="0.5" />
+      <rect x="18" y="14" width="3" height="3" rx="0.5" />
+      <rect x="14" y="18" width="3" height="3" rx="0.5" />
+      <rect x="18" y="18" width="3" height="3" rx="0.5" />
+    </svg>
   );
 }
 
