@@ -163,9 +163,6 @@ export function CreatePlanForm(): JSX.Element {
           maxLength={80}
           className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1228] px-3 text-sm text-white outline-none transition focus:border-indigo-300/60 focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-60"
         />
-        <Hint>
-          Shown to customers on the checkout page. Helps them know exactly what they&apos;re subscribing to.
-        </Hint>
       </Field>
 
       <Field id="token" label="Payment token">
@@ -188,9 +185,6 @@ export function CreatePlanForm(): JSX.Element {
             </option>
           ))}
         </select>
-        <Hint>
-          Tokens are restricted to the protocol allow-list for security.
-        </Hint>
       </Field>
 
       <Field id="amount" label="Amount per cycle">
@@ -204,17 +198,12 @@ export function CreatePlanForm(): JSX.Element {
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
             disabled={isBusy}
             required
-            aria-describedby="amount-hint"
             className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1228] pl-3 pr-16 text-sm text-white outline-none transition focus:border-indigo-300/60 focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-60"
           />
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white/5 px-2 py-0.5 font-mono text-[11px] text-white/60">
             {selectedToken?.symbol ?? "—"}
           </span>
         </div>
-        <Hint id="amount-hint">
-          Charged once per cycle. Subscribers approve a bounded permit covering
-          this amount × the number of cycles they authorize.
-        </Hint>
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -326,16 +315,3 @@ function Field({
   );
 }
 
-function Hint({
-  id,
-  children,
-}: {
-  id?: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <p id={id} className="mt-1.5 text-[11px] leading-relaxed text-white/45 sm:text-xs">
-      {children}
-    </p>
-  );
-}
