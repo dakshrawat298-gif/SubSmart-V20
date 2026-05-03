@@ -18,6 +18,11 @@ const ActivePlansInventory = dynamic(
   { ssr: false }
 );
 
+const MerchantAnalytics = dynamic(
+  () => import("./MerchantAnalytics").then((m) => m.MerchantAnalytics),
+  { ssr: false }
+);
+
 // ── Local-storage persistence ─────────────────────────────────────────────────
 
 const STORAGE_KEY = "subsmart_v2_created_plans";
@@ -405,6 +410,7 @@ export function CreatePlanForm(): JSX.Element {
       />
     </form>
 
+    <MerchantAnalytics createdPlans={createdPlans} />
     <ActivePlansInventory plans={createdPlans} />
     </>
   );
