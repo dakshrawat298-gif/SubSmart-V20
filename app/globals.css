@@ -6,6 +6,36 @@
   color-scheme: dark;
 }
 
+/*
+  The solid black canvas lives on <html>, not <body>.
+  This is the critical separation that makes body::before visible.
+  
+  Paint order in root stacking context:
+    1. Canvas background  → html's #000000  (painted first, bottommost)
+    2. z-index: -1 fixed  → body::before gradient (painted on top of canvas)
+    3. Block boxes        → body content (transparent body doesn't occlude ::before)
+
+  If background-color sat on <body>, it would occlude the ::before entirely.
+*/
+html {
+  background-color: #000000;
+  min-height: 100%;
+}
+
+body {
+  background-color: transparent !important;
+  background-image: none !important;
+  color: #ffffff;
+  min-height: 100vh;
+}
+
+/*
+  Silent Premium glow — two barely-perceptible radial orbs.
+  position: fixed keeps them viewport-anchored on scroll and works
+  correctly inside iframes (unlike background-attachment: fixed).
+  z-index: -1 ensures they sit above the html canvas but below all content.
+  Opacity held at 8–12%: just enough warmth to break the dead void.
+*/
 body::before {
   content: "";
   position: fixed;
@@ -13,8 +43,6 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background-image:
-    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99, 102, 241, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99,  102, 241, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168,  85, 247, 0.09) 0%, transparent 70%);
 }
-
-html, body { background-color: #000000 !important; background-image: none !important; }
