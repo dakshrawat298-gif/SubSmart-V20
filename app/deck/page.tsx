@@ -87,7 +87,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── S1: Hero ──────────────────────────────────────────────────────── */}
       <section
         data-slide-index="0"
-        className="relative flex h-[100dvh] flex-col items-center justify-center overflow-hidden px-6"
+        className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-5 py-16 pb-28 sm:px-6"
         style={{ scrollSnapAlign: "start" }}
       >
         {/* Radial glow — indigo */}
@@ -106,7 +106,7 @@ export default function DeckPage(): JSX.Element {
           {/* Badge */}
           <div
             data-animate
-            className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white/50 backdrop-blur-sm"
+            className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[9px] uppercase tracking-[0.2em] text-white/50 backdrop-blur-sm sm:mb-8 sm:px-4 sm:text-[11px]"
           >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.9)]" />
             Polygon Amoy · Testnet Live
@@ -116,7 +116,7 @@ export default function DeckPage(): JSX.Element {
           <h1
             data-animate
             data-delay="200"
-            className="bg-gradient-to-b from-white via-white to-white/40 bg-clip-text text-[clamp(3.5rem,10vw,8.5rem)] font-bold leading-[0.9] tracking-tight text-transparent"
+            className="bg-gradient-to-b from-white via-white to-white/40 bg-clip-text text-[clamp(2.5rem,10vw,8.5rem)] font-bold leading-[0.9] tracking-tight text-transparent"
           >
             SubSmart
             <br />
@@ -127,7 +127,7 @@ export default function DeckPage(): JSX.Element {
           <p
             data-animate
             data-delay="400"
-            className="mx-auto mt-8 max-w-xl text-[clamp(1rem,2.5vw,1.25rem)] font-light leading-relaxed text-white/50"
+            className="mx-auto mt-6 max-w-xl text-[clamp(0.9rem,2.5vw,1.25rem)] font-light leading-relaxed text-white/50 sm:mt-8"
           >
             Decentralized, non-custodial recurring billing — on-chain.
             <br />
@@ -140,14 +140,14 @@ export default function DeckPage(): JSX.Element {
           <div
             data-animate
             data-delay="600"
-            className="mt-10 inline-flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-black/40 backdrop-blur-md px-5 py-2.5 transition-transform hover:scale-105"
+            className="mt-8 inline-flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/[0.07] bg-black/40 backdrop-blur-md px-4 py-2 transition-transform hover:scale-105 sm:mt-10 sm:gap-3 sm:px-5 sm:py-2.5"
           >
-            <span className="font-mono text-xs text-white/30">Contract</span>
-            <span className="font-mono text-xs text-white/70 tracking-wider">
+            <span className="font-mono text-[10px] text-white/30 sm:text-xs">Contract</span>
+            <span className="font-mono text-[10px] text-white/70 tracking-wider sm:text-xs">
               0xBB05…505a
             </span>
-            <span className="h-1 w-1 rounded-full bg-white/20" />
-            <span className="font-mono text-xs font-semibold text-emerald-400">
+            <span className="hidden h-1 w-1 rounded-full bg-white/20 sm:block" />
+            <span className="font-mono text-[10px] font-semibold text-emerald-400 sm:text-xs">
               Deployed
             </span>
           </div>
@@ -156,9 +156,9 @@ export default function DeckPage(): JSX.Element {
           <div
             data-animate
             data-delay="700"
-            className="mt-16 flex flex-col items-center gap-2"
+            className="mt-12 flex flex-col items-center gap-2 sm:mt-16"
           >
-            <span className="text-[10px] uppercase tracking-[0.25em] text-white/20 font-semibold">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-white/20 font-semibold sm:text-[10px]">
               Scroll to explore
             </span>
             <svg
@@ -181,7 +181,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── S2: Problem ───────────────────────────────────────────────────── */}
       <section
         data-slide-index="1"
-        className="relative flex h-[100dvh] flex-col justify-center overflow-hidden px-6 py-16"
+        className="relative flex min-h-[100dvh] flex-col justify-center overflow-hidden px-5 py-12 pb-28 sm:px-6 sm:py-16"
         style={{ scrollSnapAlign: "start" }}
       >
         {/* Glow — rose */}
@@ -200,7 +200,7 @@ export default function DeckPage(): JSX.Element {
           {/* Eyebrow */}
           <p
             data-animate
-            className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-rose-400/80"
+            className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400/80 sm:mb-4 sm:text-[11px]"
           >
             The Problem
           </p>
@@ -209,7 +209,7 @@ export default function DeckPage(): JSX.Element {
           <h2
             data-animate
             data-delay="100"
-            className="max-w-2xl bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2.5rem,6vw,5rem)] font-bold leading-[1.0] tracking-tight text-transparent"
+            className="max-w-2xl bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2rem,7vw,5rem)] font-bold leading-[1.05] tracking-tight text-transparent"
           >
             Web3 Can&apos;t
             <br />
@@ -219,14 +219,14 @@ export default function DeckPage(): JSX.Element {
           <p
             data-animate
             data-delay="200"
-            className="mt-6 max-w-lg text-base leading-relaxed text-white/50 sm:text-lg"
+            className="mt-4 max-w-lg text-sm leading-relaxed text-white/50 sm:mt-6 sm:text-lg"
           >
             SaaS demands automated revenue. Web3 demands manual signatures.
             The current infrastructure is fundamentally broken.
           </p>
 
-          {/* Pain point cards - Apple level polish (less text, more impact) */}
-          <div className="mt-12 grid gap-5 sm:grid-cols-3">
+          {/* Pain point cards */}
+          <div className="mt-8 grid gap-3 sm:mt-12 sm:grid-cols-3 sm:gap-5">
             {[
               {
                 icon: "🔒",
@@ -251,15 +251,15 @@ export default function DeckPage(): JSX.Element {
                 key={card.title}
                 data-animate
                 data-delay={card.delay}
-                className="group rounded-2xl border border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent p-6 transition-all hover:bg-white/[0.05]"
+                className="group rounded-2xl border border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent p-4 transition-all hover:bg-white/[0.05] sm:p-6"
               >
-                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.05] text-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+                <div className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.05] text-sm shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] sm:mb-4 sm:h-10 sm:w-10 sm:text-xl">
                   {card.icon}
                 </div>
-                <h3 className="text-base font-semibold text-white/90">
+                <h3 className="text-sm font-semibold text-white/90 sm:text-base">
                   {card.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/40">
+                <p className="mt-1 text-[11px] leading-relaxed text-white/40 sm:mt-2 sm:text-sm">
                   {card.body}
                 </p>
               </div>
@@ -271,7 +271,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── S3: Solution ──────────────────────────────────────────────────── */}
       <section
         data-slide-index="2"
-        className="relative flex h-[100dvh] flex-col justify-center overflow-hidden px-6 py-16"
+        className="relative flex min-h-[100dvh] flex-col justify-center overflow-hidden px-5 py-12 pb-28 sm:px-6 sm:py-16"
         style={{ scrollSnapAlign: "start" }}
       >
         {/* Glow — emerald */}
@@ -286,12 +286,12 @@ export default function DeckPage(): JSX.Element {
           }}
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-6xl grid items-center gap-12 lg:grid-cols-2">
+        <div className="relative z-10 mx-auto w-full max-w-6xl grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
           {/* Left Text Block */}
           <div>
             <p
               data-animate
-              className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400/80"
+              className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400/80 sm:mb-4 sm:text-[11px]"
             >
               The Solution
             </p>
@@ -299,7 +299,7 @@ export default function DeckPage(): JSX.Element {
             <h2
               data-animate
               data-delay="100"
-              className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2.5rem,5vw,4.5rem)] font-bold leading-[1.0] tracking-tight text-transparent"
+              className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2rem,7vw,4.5rem)] font-bold leading-[1.05] tracking-tight text-transparent"
             >
               One Permit.
               <br />
@@ -309,24 +309,24 @@ export default function DeckPage(): JSX.Element {
             <p
               data-animate
               data-delay="200"
-              className="mt-6 text-base leading-relaxed text-white/50 sm:text-lg"
+              className="mt-4 text-sm leading-relaxed text-white/50 sm:mt-6 sm:text-lg"
             >
               The subscriber signs a single EIP-2612 gasless permit. 
-              The merchant calls <code className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-xs text-emerald-300">charge()</code>. 
+              The merchant calls <code className="rounded bg-white/[0.07] px-1 py-0.5 font-mono text-[10px] text-emerald-300 sm:px-1.5 sm:text-xs">charge()</code>. 
               Funds move directly peer-to-peer.
             </p>
 
-            <div className="mt-10 space-y-6">
+            <div className="mt-6 space-y-4 sm:mt-10 sm:space-y-6">
               {[
                 { title: "Zero Lockup", text: "Merchants get paid instantly. No withdrawal delays." },
                 { title: "Math-Enforced Limits", text: "Hard-coded cycle limits. Overcharging is cryptographically impossible." },
                 { title: "Non-Custodial", text: "SubSmart coordinates the billing, but never touches the funds." }
               ].map((item, idx) => (
-                <div data-animate data-delay={300 + idx * 100} key={item.title} className="flex gap-4">
-                  <div className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                <div data-animate data-delay={300 + idx * 100} key={item.title} className="flex gap-3 sm:gap-4">
+                  <div className="mt-1.5 h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)] sm:mt-1 sm:h-1.5 sm:w-1.5" />
                   <div>
-                    <h4 className="text-sm font-semibold text-white/90">{item.title}</h4>
-                    <p className="mt-1 text-sm text-white/40">{item.text}</p>
+                    <h4 className="text-xs font-semibold text-white/90 sm:text-sm">{item.title}</h4>
+                    <p className="mt-0.5 text-[11px] text-white/40 sm:mt-1 sm:text-sm">{item.text}</p>
                   </div>
                 </div>
               ))}
@@ -361,7 +361,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── S4: Builder ───────────────────────────────────────────────────── */}
       <section
         data-slide-index="3"
-        className="relative flex h-[100dvh] flex-col items-center justify-center overflow-hidden px-6 py-16"
+        className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-5 py-12 pb-28 sm:px-6 sm:py-16"
         style={{ scrollSnapAlign: "start" }}
       >
         {/* Glow — violet */}
@@ -379,7 +379,7 @@ export default function DeckPage(): JSX.Element {
         <div className="relative z-10 mx-auto w-full max-w-4xl text-center">
           <p
             data-animate
-            className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-violet-400/80"
+            className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400/80 sm:mb-4 sm:text-[11px]"
           >
             The Builder
           </p>
@@ -387,24 +387,24 @@ export default function DeckPage(): JSX.Element {
           <h2
             data-animate
             data-delay="100"
-            className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2.5rem,6vw,5rem)] font-bold leading-[1.0] tracking-tight text-transparent"
+            className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-[clamp(2rem,7vw,5rem)] font-bold leading-[1.05] tracking-tight text-transparent"
           >
             One iPhone.
             <br />
             One Student.
             <br />
-            <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent text-[clamp(2rem,4.5vw,4rem)]">
+            <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent text-[clamp(1.8rem,6vw,4rem)]">
               Absolute Execution.
             </span>
           </h2>
 
-          {/* Quote block - Thinner borders, sleeker look */}
+          {/* Quote block */}
           <div
             data-animate
             data-delay="300"
-            className="mx-auto mt-12 max-w-2xl rounded-2xl border border-white/[0.05] bg-white/[0.02] p-8 shadow-2xl backdrop-blur-md"
+            className="mx-auto mt-8 max-w-2xl rounded-2xl border border-white/[0.05] bg-white/[0.02] p-5 shadow-2xl backdrop-blur-md sm:mt-12 sm:p-8"
           >
-            <p className="text-base font-light leading-relaxed text-white/60 sm:text-lg italic">
+            <p className="text-sm font-light leading-relaxed text-white/60 sm:text-lg italic">
               &ldquo;Built entirely on an iPhone by a{" "}
               <span className="text-white/90 font-medium not-italic">
                 19-year-old solo BBA student
@@ -419,7 +419,7 @@ export default function DeckPage(): JSX.Element {
           <div
             data-animate
             data-delay="500"
-            className="mt-12 flex flex-wrap justify-center gap-8 sm:gap-16"
+            className="mt-8 flex flex-wrap justify-center gap-6 sm:mt-12 sm:gap-16"
           >
             {[
               { value: "1",      label: "Developer"         },
@@ -427,11 +427,11 @@ export default function DeckPage(): JSX.Element {
               { value: "0",      label: "VC Backing (yet)"  },
               { value: "∞",      label: "Conviction"        },
             ].map((s) => (
-              <div key={s.label} className="flex flex-col items-center gap-2">
-                <span className="text-4xl font-bold text-white/90 tabular-nums sm:text-5xl tracking-tight">
+              <div key={s.label} className="flex flex-col items-center gap-1 sm:gap-2">
+                <span className="text-3xl font-bold text-white/90 tabular-nums sm:text-5xl tracking-tight">
                   {s.value}
                 </span>
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-white/30 sm:text-[10px]">
                   {s.label}
                 </span>
               </div>
@@ -443,7 +443,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── S5: The Ask ───────────────────────────────────────────────────── */}
       <section
         data-slide-index="4"
-        className="relative flex h-[100dvh] flex-col items-center justify-center overflow-hidden px-6 py-16"
+        className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-5 py-12 pb-28 sm:px-6 sm:py-16"
         style={{ scrollSnapAlign: "start" }}
       >
         {/* Glow — amber */}
@@ -461,26 +461,30 @@ export default function DeckPage(): JSX.Element {
         <div className="relative z-10 mx-auto w-full max-w-4xl text-center">
           <p
             data-animate
-            className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400/80"
+            className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/80 sm:mb-4 sm:text-[11px]"
           >
             The Ask
           </p>
 
           {/* Big number */}
           <div data-animate data-delay="100">
-            <span className="block bg-gradient-to-b from-amber-200 via-amber-300 to-amber-500/60 bg-clip-text text-[clamp(4.5rem,14vw,12rem)] font-bold leading-none tracking-tighter text-transparent drop-shadow-2xl">
+            <span className="block bg-gradient-to-b from-amber-200 via-amber-300 to-amber-500/60 bg-clip-text text-[clamp(3.5rem,14vw,12rem)] font-bold leading-none tracking-tighter text-transparent drop-shadow-2xl">
               $10k
             </span>
-            <p className="mt-4 text-sm font-semibold tracking-widest uppercase text-white/40 sm:text-base">
-              Seed Round <span className="mx-2 opacity-50">•</span> Pre-Revenue <span className="mx-2 opacity-50">•</span> Pre-Audit
-            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-x-2 gap-y-1 text-[10px] font-semibold tracking-widest uppercase text-white/40 sm:text-base">
+              <span>Seed Round</span>
+              <span className="opacity-50">•</span>
+              <span>Pre-Revenue</span>
+              <span className="opacity-50">•</span>
+              <span>Pre-Audit</span>
+            </div>
           </div>
 
           {/* Use of funds */}
           <div
             data-animate
             data-delay="300"
-            className="mx-auto mt-12 grid max-w-2xl gap-4 sm:grid-cols-2"
+            className="mx-auto mt-8 grid max-w-2xl gap-3 sm:mt-12 sm:grid-cols-2 sm:gap-4"
           >
             {[
               {
@@ -500,17 +504,17 @@ export default function DeckPage(): JSX.Element {
             ].map((item) => (
               <div
                 key={item.title}
-                className={`rounded-2xl border ${item.accent} p-6 text-left backdrop-blur-sm`}
+                className={`rounded-2xl border ${item.accent} p-4 text-left backdrop-blur-sm sm:p-6`}
               >
                 <span
-                  className={`text-3xl font-bold tabular-nums tracking-tight ${item.label}`}
+                  className={`text-2xl font-bold tabular-nums tracking-tight sm:text-3xl ${item.label}`}
                 >
                   {item.pct}
                 </span>
-                <h3 className="mt-3 text-sm font-semibold text-white/90">
+                <h3 className="mt-2 text-xs font-semibold text-white/90 sm:mt-3 sm:text-sm">
                   {item.title}
                 </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-white/40">
+                <p className="mt-1 text-[11px] leading-relaxed text-white/40 sm:mt-1.5 sm:text-xs">
                   {item.body}
                 </p>
               </div>
@@ -521,18 +525,18 @@ export default function DeckPage(): JSX.Element {
           <div
             data-animate
             data-delay="500"
-            className="mt-14 flex flex-col items-center gap-4"
+            className="mt-10 flex flex-col items-center gap-3 sm:mt-14 sm:gap-4"
           >
-            <p className="text-xs font-medium uppercase tracking-widest text-white/30">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-white/30 sm:text-xs">
               Angel introductions welcome
             </p>
             <a
               href="mailto:rawatdaksh179@gmail.com"
-              className="group inline-flex min-h-[52px] items-center gap-3 rounded-full bg-white px-8 text-sm font-bold text-black transition-all hover:bg-neutral-200 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+              className="group inline-flex min-h-[48px] items-center gap-2 rounded-full bg-white px-6 text-xs font-bold text-black transition-all hover:bg-neutral-200 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:min-h-[52px] sm:gap-3 sm:px-8 sm:text-sm"
             >
               Contact Founder
               <svg
-                className="h-4 w-4 transition-transform group-hover:translate-x-1"
+                className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -552,7 +556,7 @@ export default function DeckPage(): JSX.Element {
       {/* ── Navigation dots ──────────────────────────────────────────────── */}
       <nav
         aria-label="Slide navigation"
-        className="fixed right-5 top-1/2 z-50 flex -translate-y-1/2 flex-col gap-4 sm:right-8"
+        className="fixed right-3 top-1/2 z-50 flex -translate-y-1/2 flex-col gap-3 sm:right-8 sm:gap-4"
       >
         {SLIDES.map((slide, i) => (
           <button
@@ -563,8 +567,8 @@ export default function DeckPage(): JSX.Element {
             className={[
               "rounded-full transition-all duration-300 focus:outline-none",
               i === current
-                ? "h-8 w-1.5 bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]"
-                : "h-1.5 w-1.5 bg-white/20 hover:bg-white/60 hover:scale-150",
+                ? "h-6 w-1 bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] sm:h-8 sm:w-1.5"
+                : "h-1 w-1 bg-white/20 hover:bg-white/60 hover:scale-150 sm:h-1.5 sm:w-1.5",
             ].join(" ")}
           />
         ))}
@@ -573,12 +577,12 @@ export default function DeckPage(): JSX.Element {
       {/* ── Slide counter ─────────────────────────────────────────────────── */}
       <div
         aria-hidden="true"
-        className="fixed bottom-6 left-6 z-50 flex items-baseline gap-1 tabular-nums sm:bottom-8 sm:left-8 pointer-events-none"
+        className="fixed bottom-6 left-5 z-50 flex items-baseline gap-1 tabular-nums pointer-events-none sm:bottom-8 sm:left-8"
       >
-        <span className="text-2xl font-bold leading-none text-white/80 tracking-tighter">
+        <span className="text-xl font-bold leading-none text-white/80 tracking-tighter sm:text-2xl">
           {String(current + 1).padStart(2, "0")}
         </span>
-        <span className="text-sm font-medium leading-none text-white/20">
+        <span className="text-[10px] font-medium leading-none text-white/20 sm:text-sm">
           /{String(SLIDES.length).padStart(2, "0")}
         </span>
       </div>
