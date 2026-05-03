@@ -5,7 +5,6 @@ import { useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseAbiItem, formatUnits } from "viem";
 import type { Address } from "viem";
 import { getBillingHubAddress } from "@/lib/chain/billingHub";
-import { toast } from "@/lib/toast";
 
 // ── Event ABI fragment ────────────────────────────────────────────────────────
 
@@ -46,6 +45,12 @@ export type MerchantAnalyticsResult = {
   /** Approximate number of blocks that were scanned. */
   readonly scannedBlocks: number;
   readonly isLoading: boolean;
+  /**
+   * true when the last fetch failed due to a transient RPC issue.
+   * The component renders a muted inline note — no red toast is fired
+   * for analytics failures (they are non-fatal and self-heal on refresh).
+   */
+  readonly syncError: boolean;
   readonly refetch: () => void;
 };
 
@@ -78,6 +83,7 @@ export function useMerchantAnalytics(
     useState<readonly number[]>(EMPTY_SPARKLINE);
   const [scannedBlocks, setScannedBlocks] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [fetchTick, setFetchTick] = useState(0);
 
   const refetch = useCallback(() => setFetchTick((t) => t + 1), []);
@@ -97,6 +103,7 @@ export function useMerchantAnalytics(
 
     void (async (): Promise<void> => {
       setIsLoading(true);
+      setSyncError(false);
 
       try {
         // ── 1. Derive safe block window (500 blocks, well within RPC cap) ──
@@ -173,11 +180,13 @@ export function useMerchantAnalytics(
           setScannedBlocks(blockWindow);
         }
       } catch (err: unknown) {
-        // Log the raw technical error for debugging only — never surface it
-        // to the user. The panel stays at $0.00 and a clean message is shown.
+        // Analytics failures are non-fatal — transient RPC rate-limits or
+        // block-range caps that self-heal. Log for debugging only; never
+        // fire a red toast for this. The component renders a muted inline
+        // "Unable to sync" note and the merchant can manually refresh.
         console.error("[MerchantAnalytics] getLogs failed:", err);
         if (!cancelled) {
-          toast.error("Analytics sync delayed. Please try refreshing.");
+          setSyncError(true);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -197,6 +206,7 @@ export function useMerchantAnalytics(
     sparkline,
     scannedBlocks,
     isLoading,
+    syncError,
     refetch,
   };
 }

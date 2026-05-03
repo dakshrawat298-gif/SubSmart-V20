@@ -16,6 +16,11 @@ export const viewport = {
   themeColor: "#0b1020",
   width: "device-width",
   initialScale: 1,
+  // Prevent iOS Safari from zooming on input focus and on double-tap.
+  // "user-scalable=no" alone is insufficient on iOS 10+ — maximumScale=1
+  // is the reliable override for WebKit-based browsers.
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

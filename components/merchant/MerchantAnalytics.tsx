@@ -48,6 +48,7 @@ export function MerchantAnalytics({
     sparkline,
     scannedBlocks,
     isLoading,
+    syncError,
     refetch,
   } = useMerchantAnalytics(planNames);
 
@@ -155,8 +156,27 @@ export function MerchantAnalytics({
         </div>
       )}
 
+      {/* Sync error — muted inline note, no red toast */}
+      {!isLoading && syncError && (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-white/30">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-3 w-3 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          Unable to sync analytics — network congested. Hit Refresh to retry.
+        </p>
+      )}
+
       {/* Empty state */}
-      {!isLoading && totalCharges === 0 && scannedBlocks > 0 && (
+      {!isLoading && !syncError && totalCharges === 0 && scannedBlocks > 0 && (
         <p className="mt-3 text-center text-[11px] text-white/20">
           No charges found in the last ~{scannedBlocks.toLocaleString()} blocks
         </p>

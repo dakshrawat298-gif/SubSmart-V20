@@ -55,6 +55,36 @@ body {
   z-index: -1 ensures they sit above the html canvas but below all content.
   Opacity held at 8–12%: just enough warmth to break the dead void.
 */
+/*
+  ── iOS Safari: prevent auto-zoom on input focus ───────────────────────────
+  iOS zooms whenever a focused form element has font-size < 16px.
+  We enforce a floor of 16px on mobile via media query so Tailwind text
+  utility classes still apply on desktop (no !important on ≥ md).
+  The -webkit-min-device-pixel-ratio: 0 selector targets WebKit only.
+*/
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/*
+  ── touch-action: manipulation ─────────────────────────────────────────────
+  Eliminates the 300 ms tap delay on iOS/Android and prevents double-tap
+  zoom on interactive elements — no JavaScript required.
+*/
+button,
+a,
+[role="button"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
 body::before {
   content: "";
   position: fixed;
