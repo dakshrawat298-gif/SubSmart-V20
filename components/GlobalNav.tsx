@@ -37,6 +37,7 @@ export function GlobalNav(): JSX.Element | null {
   const pathname = usePathname() ?? "/";
 
   if (pathname.startsWith("/checkout")) return null;
+  if (pathname.startsWith("/deck")) return null;
 
   return (
     <header className="sticky top-0 z-40 w-full">
