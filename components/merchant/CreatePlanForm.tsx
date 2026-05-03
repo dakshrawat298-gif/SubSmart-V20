@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { parseUnits, type Address } from "viem";
 import { getTokensForChain, type TokenInfo } from "@/lib/chain/contracts";
@@ -10,6 +10,40 @@ import { useCreatePlan } from "@/hooks/useCreatePlan";
 import { CreatePlanStatus } from "./CreatePlanStatus";
 import { CreatePlanTerminal } from "./CreatePlanTerminal";
 import { CreatePlanDiagnostics } from "./CreatePlanDiagnostics";
+import {
+  ActivePlansInventory,
+  type CreatedPlan,
+} from "./ActivePlansInventory";
+
+// ── Local-storage persistence ─────────────────────────────────────────────────
+
+const STORAGE_KEY = "subsmart_v2_created_plans";
+
+type StoredPlan = Omit<CreatedPlan, "planId"> & { planId: string };
+
+function loadPlans(): CreatedPlan[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as StoredPlan[];
+    return arr.map((p) => ({ ...p, planId: BigInt(p.planId) }));
+  } catch {
+    return [];
+  }
+}
+
+function savePlans(plans: CreatedPlan[]): void {
+  try {
+    const serialisable: StoredPlan[] = plans.map((p) => ({
+      ...p,
+      planId: p.planId.toString(),
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serialisable));
+  } catch {
+    // Quota exceeded or private-browsing restriction — degrade silently.
+  }
+}
 
 type FormState = {
   readonly planName: string;
@@ -49,6 +83,59 @@ export function CreatePlanForm(): JSX.Element {
   const { state, submit, reset } = useCreatePlan();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [validationError, setValidationError] = useState<string | undefined>();
+
+  // ── Plan inventory ──────────────────────────────────────────────────────────
+  // Lazily initialised from localStorage so the list survives page refresh.
+  const [createdPlans, setCreatedPlans] = useState<CreatedPlan[]>(loadPlans);
+
+  // Snapshot of human-readable form values captured at submit time. Using a
+  // ref (not state) avoids stale-closure issues — the success effect reads
+  // the value synchronously whenever it fires, with no re-render dependency.
+  const pendingMeta = useRef<{
+    planName: string;
+    amount: string;
+    symbol: string;
+    cycleLabel: string;
+    maxCycles: number;
+  } | null>(null);
+
+  // StrictMode-safe dedup guard: prevents the success branch from running
+  // twice when React double-invokes effects in development.
+  const successFiredRef = useRef(false);
+
+  useEffect(() => {
+    // Reset the dedup guard whenever the flow resets to idle.
+    if (state.status === "idle") {
+      successFiredRef.current = false;
+      return;
+    }
+
+    // Only act once per successful submission.
+    if (
+      state.status === "success" &&
+      !successFiredRef.current &&
+      state.planId !== undefined &&
+      pendingMeta.current !== null
+    ) {
+      successFiredRef.current = true;
+      const meta = pendingMeta.current;
+      const newPlan: CreatedPlan = {
+        planId: state.planId,
+        planName: meta.planName,
+        amount: meta.amount,
+        symbol: meta.symbol,
+        cycleLabel: meta.cycleLabel,
+        maxCycles: meta.maxCycles,
+        hash: state.hash,
+        createdAt: Date.now(),
+      };
+      setCreatedPlans((prev) => {
+        const updated = [newPlan, ...prev];
+        savePlans(updated);
+        return updated;
+      });
+    }
+  }, [state]);
 
   const isBusy =
     state.status === "simulating" ||
@@ -135,6 +222,18 @@ export function CreatePlanForm(): JSX.Element {
       return;
     }
 
+    // Snapshot human-readable form values at submit time so the inventory
+    // entry is accurate regardless of what happens to form state mid-mining.
+    pendingMeta.current = {
+      planName: form.planName.trim(),
+      amount: form.amount.trim(),
+      symbol: selectedToken.symbol,
+      cycleLabel:
+        CYCLE_PRESETS.find((p) => p.seconds === form.cycleSeconds)?.label ??
+        "Custom",
+      maxCycles: parsedMaxCycles,
+    };
+
     await submit({
       token: selectedToken.address,
       amountPerCycle: parsedAmount,
@@ -146,6 +245,7 @@ export function CreatePlanForm(): JSX.Element {
   const tokensUnavailable = tokens.length === 0;
 
   return (
+    <>
     <form
       onSubmit={onSubmit}
       noValidate
@@ -290,6 +390,9 @@ export function CreatePlanForm(): JSX.Element {
         parsedMaxCycles={parsedMaxCycles}
       />
     </form>
+
+    <ActivePlansInventory plans={createdPlans} />
+    </>
   );
 }
 
