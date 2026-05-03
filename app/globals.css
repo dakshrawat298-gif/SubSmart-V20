@@ -5,20 +5,19 @@
 :root {
   --background: #0b1020;
   --foreground: #f5f7ff;
+  color-scheme: dark;
 }
 
 html,
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: #0b1020 !important;
+  color: #f5f7ff;
   min-height: 100vh;
 }
 
 /*
-  Silent Premium background — two soft radial orbs that work correctly inside
-  iframes. We use a pseudo-element with position:fixed so the orb layer stays
-  anchored to the viewport on scroll WITHOUT relying on background-attachment:fixed,
-  which is silently dropped by browsers when the document is inside an iframe.
+  Silent Premium background — fixed pseudo-element works correctly inside
+  iframes, unlike background-attachment: fixed which is silently dropped.
 */
 body::before {
   content: "";
