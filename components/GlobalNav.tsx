@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { ConnectButton } from "@/components/web3/ConnectButton";
 
 type NavItem = {
-  readonly href: "/merchant" | "/customer";
+  readonly href: "/merchant" | "/portal";
   readonly label: string;
   readonly shortLabel: string;
   readonly accent: "indigo" | "fuchsia";
@@ -19,7 +19,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     accent: "indigo",
   },
   {
-    href: "/customer",
+    href: "/portal",
     label: "Customer Portal",
     shortLabel: "Customer",
     accent: "fuchsia",
