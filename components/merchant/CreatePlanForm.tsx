@@ -85,8 +85,10 @@ export function CreatePlanForm(): JSX.Element {
   const [validationError, setValidationError] = useState<string | undefined>();
 
   // ── Plan inventory ──────────────────────────────────────────────────────────
-  // Lazily initialised from localStorage so the list survives page refresh.
-  const [createdPlans, setCreatedPlans] = useState<CreatedPlan[]>(loadPlans);
+  // Start with an empty array so server and client render identically (no
+  // hydration mismatch). The actual localStorage data is loaded in the mount
+  // effect below — client-only, after hydration is complete.
+  const [createdPlans, setCreatedPlans] = useState<CreatedPlan[]>([]);
 
   // Snapshot of human-readable form values captured at submit time. Using a
   // ref (not state) avoids stale-closure issues — the success effect reads
@@ -102,6 +104,15 @@ export function CreatePlanForm(): JSX.Element {
   // StrictMode-safe dedup guard: prevents the success branch from running
   // twice when React double-invokes effects in development.
   const successFiredRef = useRef(false);
+
+  // Load persisted plans from localStorage after mount (client-only).
+  // Empty dep array [] guarantees this runs exactly once, after the first
+  // paint — never during SSR, never during hydration.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCreatedPlans(loadPlans());
+    }
+  }, []);
 
   useEffect(() => {
     // Reset the dedup guard whenever the flow resets to idle.
