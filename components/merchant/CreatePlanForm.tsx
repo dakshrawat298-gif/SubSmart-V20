@@ -7,13 +7,16 @@ import { getTokensForChain, type TokenInfo } from "@/lib/chain/contracts";
 import { getBillingHubAddress } from "@/lib/chain/billingHub";
 import { CYCLE_PRESETS } from "@/lib/utils/format";
 import { useCreatePlan } from "@/hooks/useCreatePlan";
+import dynamic from "next/dynamic";
 import { CreatePlanStatus } from "./CreatePlanStatus";
 import { CreatePlanTerminal } from "./CreatePlanTerminal";
 import { CreatePlanDiagnostics } from "./CreatePlanDiagnostics";
-import {
-  ActivePlansInventory,
-  type CreatedPlan,
-} from "./ActivePlansInventory";
+import { type CreatedPlan } from "./ActivePlansInventory";
+
+const ActivePlansInventory = dynamic(
+  () => import("./ActivePlansInventory").then((m) => m.ActivePlansInventory),
+  { ssr: false }
+);
 
 // ── Local-storage persistence ─────────────────────────────────────────────────
 
