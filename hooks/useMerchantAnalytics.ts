@@ -19,14 +19,14 @@ const USDC_DECIMALS = 6;
 const SPARKLINE_BUCKETS = 24;
 
 /**
- * 500 blocks ≈ 16 min on Polygon Amoy (2 s avg).
+ * 200 blocks ≈ 6 min on Polygon Amoy (2 s avg block time).
  *
- * Public Amoy RPC nodes cap eth_getLogs at ~3 500 blocks per request.
- * Using 500 gives a 7× safety margin so we never trip the range limit.
- * If the call still fails (e.g. degraded node), the catch routes the error
- * to the global toast — the panel simply stays at $0.00 with no inline crash.
+ * Free public Amoy RPC nodes have a very low eth_getLogs range cap.
+ * 200 blocks stays well inside that limit while still capturing recent
+ * on-chain activity. The panel is explicitly labelled "recent blocks" so
+ * the narrow window is transparent to the merchant.
  */
-const SCAN_BLOCKS = 500n;
+const SCAN_BLOCKS = 200n;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -173,10 +173,11 @@ export function useMerchantAnalytics(
           setScannedBlocks(blockWindow);
         }
       } catch (err: unknown) {
-        // Never render the raw error in the DOM — route it to the global
-        // floating toast so the panel degrades gracefully to $0.00.
+        // Log the raw technical error for debugging only — never surface it
+        // to the user. The panel stays at $0.00 and a clean message is shown.
+        console.error("[MerchantAnalytics] getLogs failed:", err);
         if (!cancelled) {
-          toast.error(err);
+          toast.error("Analytics sync delayed. Please try refreshing.");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
