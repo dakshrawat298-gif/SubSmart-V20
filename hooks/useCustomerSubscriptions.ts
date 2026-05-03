@@ -99,12 +99,11 @@ export function useCustomerSubscriptions(): {
 
       try {
         // ── 1. Fetch Subscribed events for this subscriber ─────────────────
-        // Dynamic window: scan only the most recent 1 000 blocks so we
-        // never trip Amoy's eth_getLogs range cap, regardless of when the
-        // BillingHub was deployed or how stale the cached client is.
+        // 500 blocks ≈ 16 min on Polygon Amoy (2 s avg). Stays well inside
+        // the free public RPC eth_getLogs range cap to prevent rate-limit errors.
         const currentBlock = await publicClient.getBlockNumber();
         const safeFromBlock =
-          currentBlock > 1000n ? currentBlock - 1000n : 0n;
+          currentBlock > 500n ? currentBlock - 500n : 0n;
 
         const logs = await publicClient.getLogs({
           address: hubAddress,
@@ -265,12 +264,11 @@ export function useCustomerSubscriptions(): {
 
         setSubscriptions(result);
       } catch (err: unknown) {
+        // Log the raw technical error for debugging only — never surface it
+        // to the customer UI.
+        console.error("[useCustomerSubscriptions] fetch failed:", err);
         if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load subscriptions.",
-          );
+          setError("Unable to sync on-chain data. Network congested.");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
