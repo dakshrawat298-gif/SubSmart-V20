@@ -33,8 +33,10 @@ const NAV_ITEMS: readonly NavItem[] = [
  * always obvious. Only `ConnectButton` is a client-side island; `usePathname`
  * forces this component into the client tree, which is fine — it's tiny.
  */
-export function GlobalNav(): JSX.Element {
+export function GlobalNav(): JSX.Element | null {
   const pathname = usePathname() ?? "/";
+
+  if (pathname.startsWith("/checkout")) return null;
 
   return (
     <header className="sticky top-0 z-40 w-full">
