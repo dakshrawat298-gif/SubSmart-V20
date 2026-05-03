@@ -12,11 +12,21 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   min-height: 100vh;
-  /* Silent Premium: two barely-visible radial orbs anchored to the viewport.
-     Indigo breath in the top-left, violet exhale in the bottom-right.
-     Opacity kept at ≤8% so they add depth without ever competing with content. */
+}
+
+/*
+  Silent Premium background — two soft radial orbs that work correctly inside
+  iframes. We use a pseudo-element with position:fixed so the orb layer stays
+  anchored to the viewport on scroll WITHOUT relying on background-attachment:fixed,
+  which is silently dropped by browsers when the document is inside an iframe.
+*/
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
-    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99,  102, 241, 0.08) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168,  85, 247, 0.06) 0%, transparent 70%);
-  background-attachment: fixed;
+    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99,  102, 241, 0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168,  85, 247, 0.08) 0%, transparent 70%);
 }
