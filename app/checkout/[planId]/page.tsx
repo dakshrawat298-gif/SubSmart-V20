@@ -19,8 +19,6 @@ type Props = {
 export default function CheckoutPage({ params }: Props): JSX.Element {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
-      <BackgroundDecor />
-
       <main className="relative mx-auto w-full max-w-xl px-4 pb-20 pt-8 sm:px-6 sm:pt-12">
         <div className="mb-6 sm:mb-8">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-widest text-white/70 sm:text-xs">
@@ -42,26 +40,3 @@ export default function CheckoutPage({ params }: Props): JSX.Element {
   );
 }
 
-function BackgroundDecor(): JSX.Element {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 -z-10"
-    >
-      <div className="absolute -left-40 top-20 h-[380px] w-[380px] rounded-full bg-fuchsia-600/20 blur-3xl" />
-      <div className="absolute -right-40 -top-20 h-[380px] w-[380px] rounded-full bg-indigo-600/20 blur-3xl" />
-      <div
-        className="absolute inset-0 opacity-[0.05]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-          maskImage:
-            "radial-gradient(ellipse at top, rgba(0,0,0,0.6), transparent 70%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse at top, rgba(0,0,0,0.6), transparent 70%)",
-        }}
-      />
-    </div>
-  );
-}
