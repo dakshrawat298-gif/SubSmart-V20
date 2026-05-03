@@ -2,6 +2,7 @@ import { CheckoutClient } from "@/components/checkout/CheckoutClient";
 
 type Props = {
   params: { planId: string };
+  searchParams?: { name?: string };
 };
 
 /**
@@ -16,7 +17,9 @@ type Props = {
  * which parses + validates it — server components must not import viem
  * (client-only) just for a BigInt parse.
  */
-export default function CheckoutPage({ params }: Props): JSX.Element {
+export default function CheckoutPage({ params, searchParams }: Props): JSX.Element {
+  const planName = searchParams?.name?.trim() || undefined;
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <main className="relative mx-auto w-full max-w-xl px-4 pb-20 pt-8 sm:px-6 sm:pt-12">
@@ -26,7 +29,7 @@ export default function CheckoutPage({ params }: Props): JSX.Element {
             Customer checkout
           </span>
           <h1 className="mt-3 bg-gradient-to-b from-white to-white/70 bg-clip-text text-2xl font-semibold leading-tight tracking-tight text-transparent sm:text-3xl">
-            Subscribe to this plan
+            {planName ? planName : "Subscribe to this plan"}
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-white/55 sm:text-base">
             One signature. Bounded permit. Auto-settled every cycle — you
@@ -34,7 +37,7 @@ export default function CheckoutPage({ params }: Props): JSX.Element {
           </p>
         </div>
 
-        <CheckoutClient planIdParam={params.planId} />
+        <CheckoutClient planIdParam={params.planId} planNameParam={planName} />
       </main>
     </div>
   );

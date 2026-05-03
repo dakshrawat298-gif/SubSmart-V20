@@ -12,9 +12,10 @@ import { CheckoutStatus } from "@/components/checkout/CheckoutStatus";
 
 type Props = {
   readonly planIdParam: string;
+  readonly planNameParam?: string;
 };
 
-export function CheckoutClient({ planIdParam }: Props): JSX.Element {
+export function CheckoutClient({ planIdParam, planNameParam }: Props): JSX.Element {
   const { address: account, isConnected } = useAccount();
   const chainId = useChainId();
   const billingHubAddress = getBillingHubAddress(chainId);
@@ -180,7 +181,7 @@ export function CheckoutClient({ planIdParam }: Props): JSX.Element {
   return (
     <>
       <div className="space-y-5">
-        <PlanSummaryCard planId={planId} plan={plan} chainId={chainId} />
+        <PlanSummaryCard planId={planId} plan={plan} chainId={chainId} planName={planNameParam} />
 
         {!isConnected && (
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">

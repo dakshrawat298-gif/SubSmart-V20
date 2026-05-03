@@ -12,6 +12,7 @@ type Props = {
   readonly planId: bigint;
   readonly plan: PlanData;
   readonly chainId: number;
+  readonly planName?: string;
 };
 
 /**
@@ -23,7 +24,7 @@ type Props = {
  *
  * Per §3.1: single responsibility (display plan data). Wallet-unaware.
  */
-export function PlanSummaryCard({ planId, plan, chainId }: Props): JSX.Element {
+export function PlanSummaryCard({ planId, plan, chainId, planName }: Props): JSX.Element {
   const token = getTokenByAddress(chainId, plan.token);
   const symbol = token?.symbol ?? "tokens";
   const decimals = token?.decimals ?? 18;
@@ -45,7 +46,13 @@ export function PlanSummaryCard({ planId, plan, chainId }: Props): JSX.Element {
         </span>
       </div>
 
-      <h2 className="mt-3 bg-gradient-to-b from-white to-white/70 bg-clip-text text-xl font-semibold leading-tight tracking-tight text-transparent sm:text-2xl">
+      {planName && (
+        <p className="mt-2 text-base font-semibold text-white sm:text-lg">
+          {planName}
+        </p>
+      )}
+
+      <h2 className="mt-1 bg-gradient-to-b from-white to-white/70 bg-clip-text text-xl font-semibold leading-tight tracking-tight text-transparent sm:text-2xl">
         {amountFormatted}{" "}
         <span className="text-indigo-300">{symbol}</span> / {cycleLengthLabel}
       </h2>

@@ -11,6 +11,7 @@ import { CreatePlanStatus } from "./CreatePlanStatus";
 import { CreatePlanDiagnostics } from "./CreatePlanDiagnostics";
 
 type FormState = {
+  readonly planName: string;
   readonly tokenAddress: Address | "";
   readonly amount: string;
   readonly cycleSeconds: bigint;
@@ -19,6 +20,7 @@ type FormState = {
 
 const INITIAL_CYCLE = CYCLE_PRESETS[2].seconds; // monthly
 const INITIAL: FormState = {
+  planName: "",
   tokenAddress: "",
   amount: "",
   cycleSeconds: INITIAL_CYCLE,
@@ -84,6 +86,7 @@ export function CreatePlanForm(): JSX.Element {
   const isFormReady =
     isConnected &&
     !!billingHubAddress &&
+    form.planName.trim().length > 0 &&
     !!selectedToken &&
     parsedAmount !== undefined &&
     form.cycleSeconds > 0n &&
@@ -100,6 +103,10 @@ export function CreatePlanForm(): JSX.Element {
     // itself is the third (and never sends empty calldata).
     if (!isConnected) {
       setValidationError("Connect your wallet first.");
+      return;
+    }
+    if (!form.planName.trim()) {
+      setValidationError("Enter a plan name so your customers know what they're subscribing to.");
       return;
     }
     if (!billingHubAddress) {
@@ -143,6 +150,23 @@ export function CreatePlanForm(): JSX.Element {
       noValidate
       className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur sm:p-7"
     >
+      <Field id="planName" label="Plan name">
+        <input
+          id="planName"
+          type="text"
+          placeholder="e.g. Netflix Premium, Gym Pro Monthly…"
+          value={form.planName}
+          onChange={(e) => setForm({ ...form, planName: e.target.value })}
+          disabled={isBusy}
+          required
+          maxLength={80}
+          className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1228] px-3 text-sm text-white outline-none transition focus:border-indigo-300/60 focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-60"
+        />
+        <Hint>
+          Shown to customers on the checkout page. Helps them know exactly what they&apos;re subscribing to.
+        </Hint>
+      </Field>
+
       <Field id="token" label="Payment token">
         <select
           id="token"
@@ -263,7 +287,7 @@ export function CreatePlanForm(): JSX.Element {
         </span>
       </button>
 
-      <CreatePlanStatus state={state} onReset={reset} />
+      <CreatePlanStatus state={state} onReset={reset} planName={form.planName.trim()} />
 
       <CreatePlanDiagnostics
         chainId={chainId}

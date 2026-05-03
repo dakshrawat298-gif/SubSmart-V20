@@ -18,9 +18,11 @@ import { buildExplorerTxUrl, shortenHash } from "@/lib/utils/format";
 export function CreatePlanStatus({
   state,
   onReset,
+  planName,
 }: {
   state: CreatePlanState;
   onReset: () => void;
+  planName?: string;
 }): JSX.Element | null {
   const chainId = useChainId();
   const chain = getChainById(chainId);
@@ -81,7 +83,7 @@ export function CreatePlanStatus({
           )}
         </span>
         {isSuccess && state.planId !== undefined && (
-          <CheckoutShare planId={state.planId} />
+          <CheckoutShare planId={state.planId} planName={planName} />
         )}
         {isSuccess && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -154,7 +156,13 @@ function Banner({
  * The URL is built from `window.location.origin` so it works in dev,
  * preview, and production deployments without configuration.
  */
-function CheckoutShare({ planId }: { planId: bigint }): JSX.Element {
+function CheckoutShare({
+  planId,
+  planName,
+}: {
+  planId: bigint;
+  planName?: string;
+}): JSX.Element {
   const [origin, setOrigin] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
@@ -164,7 +172,11 @@ function CheckoutShare({ planId }: { planId: bigint }): JSX.Element {
     }
   }, []);
 
-  const url = origin ? `${origin}/checkout/${planId.toString()}` : "";
+  const url = origin
+    ? planName
+      ? `${origin}/checkout/${planId.toString()}?name=${encodeURIComponent(planName)}`
+      : `${origin}/checkout/${planId.toString()}`
+    : "";
 
   async function handleCopy(): Promise<void> {
     if (!url) return;
@@ -216,7 +228,11 @@ function CheckoutShare({ planId }: { planId: bigint }): JSX.Element {
             Share with customers
           </div>
           <div className="text-[11px] text-white/55">
-            Plan #{planId.toString()} · checkout link
+            {planName ? (
+              <><span className="text-white/75 font-medium">{planName}</span> · Plan #{planId.toString()} · checkout link</>
+            ) : (
+              <>Plan #{planId.toString()} · checkout link</>
+            )}
           </div>
         </div>
       </div>
