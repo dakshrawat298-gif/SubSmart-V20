@@ -24,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-[#0b1020] text-[#f5f7ff]" suppressHydrationWarning>
+      <body className="bg-black text-white min-h-screen" suppressHydrationWarning>
         <Providers>
           <GlobalNav />
           {children}

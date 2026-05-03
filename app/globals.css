@@ -3,22 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --background: #0b1020;
-  --foreground: #f5f7ff;
   color-scheme: dark;
 }
 
-html,
-body {
-  background-color: #0b1020 !important;
-  color: #f5f7ff;
-  min-height: 100vh;
-}
-
-/*
-  Silent Premium background — fixed pseudo-element works correctly inside
-  iframes, unlike background-attachment: fixed which is silently dropped.
-*/
 body::before {
   content: "";
   position: fixed;
@@ -26,6 +13,8 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background-image:
-    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99,  102, 241, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168,  85, 247, 0.08) 0%, transparent 70%);
+    radial-gradient(ellipse 70% 55% at 15% 0%,   rgba(99, 102, 241, 0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 85% 100%, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
 }
+
+html, body { background-color: #000000 !important; background-image: none !important; }

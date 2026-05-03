@@ -2,8 +2,8 @@ import { ConnectButton } from "@/components/web3/ConnectButton";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen overflow-x-hidden">
-      <main className="relative mx-auto flex max-w-3xl flex-col items-center px-4 pb-20 pt-10 text-center sm:px-6 sm:pt-20">
+    <div className="bg-transparent w-full">
+      <main className="bg-transparent w-full mx-auto flex max-w-3xl flex-col items-center px-4 pb-20 pt-10 text-center sm:px-6 sm:pt-20">
         <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-widest text-white/70 sm:text-xs">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
           Wallet foundation ready
