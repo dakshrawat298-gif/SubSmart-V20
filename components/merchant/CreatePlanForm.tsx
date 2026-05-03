@@ -8,6 +8,7 @@ import { getBillingHubAddress } from "@/lib/chain/billingHub";
 import { CYCLE_PRESETS } from "@/lib/utils/format";
 import { useCreatePlan } from "@/hooks/useCreatePlan";
 import { CreatePlanStatus } from "./CreatePlanStatus";
+import { CreatePlanTerminal } from "./CreatePlanTerminal";
 import { CreatePlanDiagnostics } from "./CreatePlanDiagnostics";
 
 type FormState = {
@@ -286,6 +287,8 @@ export function CreatePlanForm(): JSX.Element {
           {isBusy ? "Working…" : "Publish plan on-chain"}
         </span>
       </button>
+
+      <CreatePlanTerminal state={state} />
 
       <CreatePlanStatus state={state} onReset={reset} planName={form.planName.trim()} />
 
