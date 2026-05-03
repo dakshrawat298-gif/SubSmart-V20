@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { shortenHash } from "@/lib/utils/format";
 
@@ -197,6 +197,59 @@ function PlanCard({
   );
 }
 
+// ── QR PNG export ─────────────────────────────────────────────────────────────
+// Entirely client-side: XMLSerializer → Blob → Image → Canvas → PNG download.
+// No SSR surface — called only from a click handler, never during render.
+
+const QR_EXPORT_SIZE = 768; // px — 4× the rendered size, print-ready
+const QR_PADDING     = 48;  // px — quiet zone required by QR spec
+
+async function downloadQrPng(
+  svgWrapperEl: HTMLElement | null,
+  planId: string,
+  planName: string
+): Promise<void> {
+  const svgEl = svgWrapperEl?.querySelector("svg");
+  if (!svgEl) return;
+
+  // 1. Serialize SVG to a data URL
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svgEl);
+  const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  // 2. Draw onto an offscreen canvas at 4× resolution with white quiet zone
+  const total = QR_EXPORT_SIZE + QR_PADDING * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width  = total;
+  canvas.height = total;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) { URL.revokeObjectURL(svgUrl); return; }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, total, total);
+
+  await new Promise<void>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, QR_PADDING, QR_PADDING, QR_EXPORT_SIZE, QR_EXPORT_SIZE);
+      URL.revokeObjectURL(svgUrl);
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = svgUrl;
+  });
+
+  // 3. Export canvas as PNG and trigger download
+  const pngUrl = canvas.toDataURL("image/png");
+  const anchor = document.createElement("a");
+  // Sanitise plan name for a valid filename
+  const safeName = planName.replace(/[^a-zA-Z0-9\-_ ]/g, "").trim().replace(/\s+/g, "-");
+  anchor.download = `SubSmart-Plan-${planId}-${safeName || "Checkout"}.png`;
+  anchor.href = pngUrl;
+  anchor.click();
+}
+
 // ── QrModal ───────────────────────────────────────────────────────────────────
 
 function QrModal({
@@ -208,6 +261,22 @@ function QrModal({
   checkoutUrl: string;
   onClose: () => void;
 }): JSX.Element {
+  const qrWrapperRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload(): Promise<void> {
+    setDownloading(true);
+    try {
+      await downloadQrPng(
+        qrWrapperRef.current,
+        plan.planId.toString(),
+        plan.planName
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   // ESC to close
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -292,7 +361,10 @@ function QrModal({
           />
 
           {/* QR code — white padded container for camera scannability */}
-          <div className="rounded-2xl bg-white p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+          <div
+            ref={qrWrapperRef}
+            className="rounded-2xl bg-white p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
+          >
             <QRCode
               value={checkoutUrl}
               size={192}
@@ -313,6 +385,34 @@ function QrModal({
               {checkoutUrl}
             </p>
           </div>
+
+          {/* Download button */}
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+            aria-label="Download QR code as PNG"
+            className={[
+              "mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-medium tracking-wide transition",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              downloading
+                ? "border-white/[0.08] bg-white/[0.04] text-white/35"
+                : "border-white/[0.08] bg-white/[0.04] text-white/50 hover:border-indigo-300/25 hover:bg-indigo-500/[0.08] hover:text-white/75",
+            ].join(" ")}
+          >
+            {downloading ? (
+              <>
+                <SpinnerIcon />
+                Exporting…
+              </>
+            ) : (
+              <>
+                <DownloadIcon />
+                Download QR · PNG
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
@@ -333,6 +433,48 @@ function MetaChip({
       <span className="text-white/25">{label}: </span>
       <span className="text-white/55">{value}</span>
     </span>
+  );
+}
+
+function DownloadIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3v13M8 12l4 4 4-4" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+function SpinnerIcon(): JSX.Element {
+  return (
+    <svg
+      className="h-3.5 w-3.5 animate-spin"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12" cy="12" r="9"
+        stroke="currentColor"
+        strokeOpacity="0.25"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 00-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
