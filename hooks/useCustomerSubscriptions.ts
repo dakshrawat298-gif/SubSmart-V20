@@ -1,4 +1,5 @@
 "use client";
+import { withRetry } from "@/lib/utils/retryHelpers";
 
 import { useState, useEffect, useCallback } from "react";
 import { useAccount, useChainId, usePublicClient } from "wagmi";
@@ -101,17 +102,19 @@ export function useCustomerSubscriptions(): {
         // ── 1. Fetch Subscribed events for this subscriber ─────────────────
         // 500 blocks ≈ 16 min on Polygon Amoy (2 s avg). Stays well inside
         // the free public RPC eth_getLogs range cap to prevent rate-limit errors.
-        const currentBlock = await publicClient.getBlockNumber();
+        const currentBlock = await withRetry(() => publicClient.getBlockNumber());
         const safeFromBlock =
           currentBlock > 500n ? currentBlock - 500n : 0n;
 
-        const logs = await publicClient.getLogs({
-          address: hubAddress,
-          event: SUBSCRIBED_EVENT,
-          args: { subscriber: account },
-          fromBlock: safeFromBlock,
-          toBlock: "latest",
-        });
+        const logs = await withRetry(() =>
+          publicClient.getLogs({
+            address: hubAddress,
+            event: SUBSCRIBED_EVENT,
+            args: { subscriber: account },
+            fromBlock: safeFromBlock,
+            toBlock: "latest",
+          })
+        );
 
         if (cancelled) return;
 
@@ -141,18 +144,22 @@ export function useCustomerSubscriptions(): {
         const rawEntries = await Promise.all(
           planIds.map(async (planId) => {
             const [sub, plan] = await Promise.all([
-              publicClient.readContract({
-                address: hubAddress,
-                abi: BILLING_HUB_READ_ABI,
-                functionName: "subscriptions",
-                args: [planId, account],
-              }),
-              publicClient.readContract({
-                address: hubAddress,
-                abi: BILLING_HUB_READ_ABI,
-                functionName: "plans",
-                args: [planId],
-              }),
+              withRetry(() =>
+                publicClient.readContract({
+                  address: hubAddress,
+                  abi: BILLING_HUB_READ_ABI,
+                  functionName: "subscriptions",
+                  args: [planId, account],
+                })
+              ),
+              withRetry(() =>
+                publicClient.readContract({
+                  address: hubAddress,
+                  abi: BILLING_HUB_READ_ABI,
+                  functionName: "plans",
+                  args: [planId],
+                })
+              ),
             ]);
             return { planId, sub, plan };
           }),
@@ -180,16 +187,20 @@ export function useCustomerSubscriptions(): {
           uniqueTokens.map(async (tokenAddr) => {
             try {
               const [dec, sym] = await Promise.all([
-                publicClient.readContract({
-                  address: tokenAddr as Address,
-                  abi: TOKEN_ABI,
-                  functionName: "decimals",
-                }),
-                publicClient.readContract({
-                  address: tokenAddr as Address,
-                  abi: TOKEN_ABI,
-                  functionName: "symbol",
-                }),
+                withRetry(() =>
+                  publicClient.readContract({
+                    address: tokenAddr as Address,
+                    abi: TOKEN_ABI,
+                    functionName: "decimals",
+                  })
+                ),
+                withRetry(() =>
+                  publicClient.readContract({
+                    address: tokenAddr as Address,
+                    abi: TOKEN_ABI,
+                    functionName: "symbol",
+                  })
+                ),
               ]);
               tokenMetaMap.set(tokenAddr, {
                 decimals: dec,
