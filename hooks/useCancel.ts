@@ -9,6 +9,7 @@ import {
 } from "@wagmi/core";
 import { BaseError, type Hash, decodeErrorResult } from "viem";
 import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
+import { toast } from "@/lib/toast";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -122,7 +123,9 @@ export function useCancel(): UseCancelReturn {
         });
         request = sim.request;
       } catch (err) {
-        setState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -135,7 +138,9 @@ export function useCancel(): UseCancelReturn {
         // currently selected chain at call time.
         hash = await writeContract(config, request);
       } catch (err) {
-        setState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -154,11 +159,14 @@ export function useCancel(): UseCancelReturn {
             status: "error",
             message: "Transaction reverted on-chain.",
           });
+          toast.error("Transaction reverted on-chain.");
           return;
         }
         setState({ status: "success", hash, blockNumber: receipt.blockNumber });
       } catch (err) {
-        setState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
       }
     },
     [account, chainId, config]

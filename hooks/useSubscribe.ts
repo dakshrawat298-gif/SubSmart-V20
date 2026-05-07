@@ -19,6 +19,7 @@ import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
 import { usePermitSignature } from "@/hooks/usePermitSignature";
 import type { PermitSummary } from "@/hooks/usePermitSignature";
 import type { BoundedAuthorization } from "@/lib/chain/permit";
+import { toast } from "@/lib/toast";
 
 /**
  * On-chain plan data returned by `BillingHub.plans(planId)`.
@@ -360,7 +361,9 @@ export function useSubscribe(
         // StrictMode, the cleanup sets cancelled=true before this catch
         // runs, silently eating the error and leaving the spinner stuck
         // forever. Errors must always reach the UI state machine.
-        setTxState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setTxState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -391,7 +394,9 @@ export function useSubscribe(
       } catch (err) {
         // Same reasoning: always surface wallet/write errors regardless of
         // cancelled state — the user needs to see what went wrong.
-        setTxState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setTxState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -411,6 +416,7 @@ export function useSubscribe(
             status: "error",
             message: "Transaction reverted on-chain.",
           });
+          toast.error("Transaction reverted on-chain.");
           return;
         }
         setTxState({
@@ -420,7 +426,9 @@ export function useSubscribe(
         });
       } catch (err) {
         // Always surface receipt-wait errors too.
-        setTxState({ status: "error", message: explainError(err) });
+        const msg = explainError(err);
+        setTxState({ status: "error", message: msg });
+        toast.error(msg);
       }
     })();
 
