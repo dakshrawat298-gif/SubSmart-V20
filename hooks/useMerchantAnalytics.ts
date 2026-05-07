@@ -1,4 +1,5 @@
 "use client";
+import { withRetry } from "@/lib/utils/retryHelpers";
 
 import { useState, useEffect, useCallback } from "react";
 import { useAccount, useChainId, usePublicClient } from "wagmi";
@@ -107,19 +108,21 @@ export function useMerchantAnalytics(
 
       try {
         // ── 1. Derive safe block window (500 blocks, well within RPC cap) ──
-        const currentBlock = await publicClient.getBlockNumber();
+        const currentBlock = await withRetry(() => publicClient.getBlockNumber());
         const fromBlock =
           currentBlock > SCAN_BLOCKS ? currentBlock - SCAN_BLOCKS : 0n;
         const blockWindow = Number(currentBlock - fromBlock);
 
         // ── 2. Fetch Charged events for this merchant address ────────────
-        const logs = await publicClient.getLogs({
-          address: hubAddress as Address,
-          event: CHARGED_EVENT,
-          args: { merchant: account },
-          fromBlock,
-          toBlock: "latest",
-        });
+        const logs = await withRetry(() =>
+          publicClient.getLogs({
+            address: hubAddress as Address,
+            event: CHARGED_EVENT,
+            args: { merchant: account },
+            fromBlock,
+            toBlock: "latest",
+          })
+        );
 
         if (cancelled) return;
 
