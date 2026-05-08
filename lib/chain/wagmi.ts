@@ -31,8 +31,16 @@ import type { CreateConnectorFn } from "wagmi";
  */
 
 const APP_NAME = "SubSmart V2.0";
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://app.subsmart.xyz";
+// Ensure we use relative paths for client-side API requests to prevent CORS errors on Vercel.
+// On the server, we need absolute paths (using Vercel's URL if available).
+export function getBaseUrl(): string {
+  if (typeof window !== "undefined") return ""; // browser should use relative url
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL.trim();
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
+
+const APP_URL = getBaseUrl();
 
 /**
  * Shared http() options.
