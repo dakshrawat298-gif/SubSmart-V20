@@ -17,6 +17,7 @@ import {
   type PermitDomain,
   type PermitMessage,
 } from "@/lib/chain/permit";
+import { toast } from "@/lib/toast";
 
 /**
  * Inputs for the permit signature hook. Pass `null` to keep the hook idle.
@@ -274,6 +275,7 @@ export function usePermitSignature(input: UsePermitSignatureInput | null): {
             ? { kind: "input_validation", message }
             : { kind: "rpc_error", message },
         });
+        toast.error(message);
       }
     })();
 
@@ -363,6 +365,7 @@ export function usePermitSignature(input: UsePermitSignatureInput | null): {
           ? { kind: "user_rejected" }
           : { kind: "unknown", message },
       });
+      toast.error(isReject ? "Signature rejected by user" : message);
     }
   }, [state, walletClient]);
 

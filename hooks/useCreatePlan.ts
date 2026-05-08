@@ -17,6 +17,7 @@ import {
   parseEventLogs,
 } from "viem";
 import { billingHubAbi, getBillingHubAddress } from "@/lib/chain/billingHub";
+import { toast } from "@/lib/toast";
 
 /**
  * Inputs for `useCreatePlan` — pre-validated by the caller so this hook only
@@ -205,10 +206,12 @@ export function useCreatePlan(): UseCreatePlanReturn {
           ],
         });
       } catch (error) {
+        const msg = `Failed to encode createPlan calldata: ${explainError(error)}`;
         setState({
           status: "error",
-          message: `Failed to encode createPlan calldata: ${explainError(error)}`,
+          message: msg,
         });
+        toast.error(msg);
         return;
       }
       if (
@@ -246,7 +249,9 @@ export function useCreatePlan(): UseCreatePlanReturn {
         });
         request = sim.request;
       } catch (error) {
-        setState({ status: "error", message: explainError(error) });
+        const msg = explainError(error);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -274,7 +279,9 @@ export function useCreatePlan(): UseCreatePlanReturn {
         // currently selected chain at call time.
         hash = await writeContract(config, request);
       } catch (error) {
-        setState({ status: "error", message: explainError(error) });
+        const msg = explainError(error);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
         return;
       }
 
@@ -292,6 +299,7 @@ export function useCreatePlan(): UseCreatePlanReturn {
             status: "error",
             message: "Transaction reverted on-chain.",
           });
+          toast.error("Transaction reverted on-chain.");
           return;
         }
 
@@ -322,7 +330,9 @@ export function useCreatePlan(): UseCreatePlanReturn {
           planId,
         });
       } catch (error) {
-        setState({ status: "error", message: explainError(error) });
+        const msg = explainError(error);
+        setState({ status: "error", message: msg });
+        toast.error(msg);
       }
     },
     [account, chainId, config]
